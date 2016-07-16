@@ -3,7 +3,7 @@ import sys
 sys.path.append('/home/pieter/projects/factors')
 import numpy as np
 import pandas as pd
-from utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand
+from utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
 from settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS
 from collections import OrderedDict
 
@@ -24,6 +24,7 @@ class LifeTable(object):
         self.lookup = None
         self.cfs = None
         self.factors = None
+        self.yield_curve = None
 
     def get_legend(self):
         df = pd.read_excel(self.xlswb, sheetname='tbl_insurance_types')
@@ -416,21 +417,16 @@ class LifeTable(object):
         cfs = cf['payments']
         insurance_id = cf['insurance_id']
         year = pd.Series(cfs.index)
-
-        if isinstance(intrest, (int, float)):
-            nyears = len(cfs)
-            yield_curve = pd.Series(nyears * [intrest])
-        else:
-            yield_curve = intrest
+        self.yield_curve = x_to_series(intrest, len(cfs))
 
         if insurance_id in ['OPLL', 'NPLL-B', 'ay_avg']:
-            pv_factors = yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
         elif insurance_id in ['NPTL-B', 'NPTL-O']:
-            pv_factors = yield_curve.map(lambda r: 1. / (1 + r / 100.))**(year + 0.5)
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**(year + 0.5)
         elif insurance_id in ['NPLL-O', 'NPLLRS', 'NPLLRU']:
             nyears_till_pension_age = cf['pension_age'] - cf['age']
             year = year + 0.5 * (year <= nyears_till_pension_age)
-            pv_factors = yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
         else:
             print("---ERROR: cannot process insurance_id: {}".format(insurance_id))
 
@@ -550,12 +546,11 @@ class LifeTable(object):
         sheets['legend'] = self.legend
         sheets['factors'] = result.unstack(['sex_insured', 'insurance_id'])
         temp = self.cfs.copy(deep=True)
-        print(temp.head())
         temp['cf'] = temp['cf'].map(lambda x: x['payments'])
         cashflows = expand(temp, 'cf')
         cashflows.set_index(['sex_insured', 'insurance_id', 'age_insured', 'year'], inplace=True)
         sheets['cashflows'] = cashflows.unstack(['sex_insured', 'insurance_id'])
-        sheets['yield_curve'] = pd.DataFrame(data=120 * [intrest], columns=['intrest'])
+        sheets['yield_curve'] = pd.DataFrame(self.yield_curve, columns=['intrest'])
         sheets['lx'] = pd.concat([self.lx['M'], self.lx['F']], axis=1)
         sheets['hx'] = pd.concat([self.hx['M'], self.hx['F']], axis=1)
         adjustments = pd.read_excel(XLSWB, sheetname='tbl_adjustments')

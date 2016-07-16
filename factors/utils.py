@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import itertools
 
@@ -83,3 +84,24 @@ def cartesian(lists, colnames):
     df = pd.DataFrame.from_records(list(itertools.product(*lists)),
                                    columns=colnames)
     return df
+
+
+def x_to_series(x, n):
+    """ Converts int, float or list to Series of length n.
+
+    Parameters:
+    -----------
+    x: int, float, list or Series
+    length: required length of returned Series
+    """
+
+    if isinstance(x, (int, float)):
+        s = pd.Series(n * [x])
+    elif isinstance(x, (list, pd.Series)):
+        x = list(x.values) if isinstance(x, pd.Series) else x
+        s = pd.Series(x + np.maximum(0, n - len(x)) * [None])
+        s.fillna(method='ffill', inplace=True)
+        s = s[:n]
+    else:
+        print("Error!")
+    return s
