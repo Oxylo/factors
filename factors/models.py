@@ -3,22 +3,32 @@ import sys
 sys.path.append('/home/pieter/projects/factors')
 import numpy as np
 import pandas as pd
-from utils import dictify, prae_to_continuous, merge_two_dicts
-from settings import UPAGE, LOWAGE, MAXAGE, XLSWB
+from utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand
+from settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS
+from collections import OrderedDict
 
 
 class LifeTable(object):
     def __init__(self, tablename, xlswb=XLSWB):
         self.tablename = tablename
         self.xlswb = xlswb
+        self.legend = self.get_legend()
         self.params = self.get_parameters()
         self.lx = self.get_lx()
         self.hx = self.get_hx()
         self.adjust = self.get_adjustments()
         self.ukv = self.get_ukv()
         self.testdata = self.get_test_data()
+        self.pension_age = None
         self.intrest = None
         self.lookup = None
+        self.cfs = None
+        self.factors = None
+
+    def get_legend(self):
+        df = pd.read_excel(self.xlswb, sheetname='tbl_insurance_types')
+        df.set_index('id_type', inplace=True)
+        return df.ix[INSURANCE_IDS]
 
     def get_parameters(self):
         df = pd.read_excel(self.xlswb, sheetname='tbl_tariff')
@@ -475,3 +485,87 @@ class LifeTable(object):
                           intrest=row.intrest)
             calculated = self.pv(cfs, row.intrest)
             print("#{} -- {} -- {}".format(row.Index, row.insurance_id, row.test_value - calculated))
+
+
+    def calculate_cashflows(self, pension_age, intrest=3):
+        """ Returns table with cashflows per insurance_id and age.
+
+        Parameters:
+        -----------
+        pension_age: int
+        intrest: int, float or Series. Default 3 pct.
+        """
+
+        # create table layout with all desired tariff combinations
+        df = cartesian(lists=[INSURANCE_IDS, ['M', 'F'], range(LOWAGE, UPAGE)],
+                       colnames=['insurance_id', 'sex_insured', 'age_insured'])
+
+        # generate cashflows
+        def map_to_cf(row):
+            return self.cf(insurance_id=row['insurance_id'],
+                           age_insured=row['age_insured'],
+                           sex_insured=row['sex_insured'],
+                           pension_age=pension_age,
+                           intrest=intrest)
+        df['cf'] = df.apply(map_to_cf, axis=1)
+        self.intrest = intrest
+        self.pension_age = pension_age
+        self.cfs = df
+        return df
+
+    def calculate_factors(self, intrest, pension_age=67):
+        """ Returns factors.
+
+        Parameters:
+        -----------
+        intrest: int, float or Series.
+        pension_age: int. Default 67 year.
+        """
+        if (intrest == self.intrest) and (pension_age == self.pension_age):
+            factors = self.cfs
+        else:
+            self.cfs = self.calculate_cashflows(intrest=intrest, pension_age=pension_age)
+            factors = self.cfs.copy(deep=True)
+        factors['tar'] = factors.apply(lambda row: self.pv(row['cf'], intrest=intrest), axis=1)
+        factors.set_index(['insurance_id', 'sex_insured', 'age_insured'], inplace=True)
+        factors.drop('cf', inplace=True, axis=1)
+        self.factors = factors
+        return factors
+
+    def export(self, xlswb, intrest, pension_age=67):
+        """ Exports results to given xlswb.
+
+        Parameters:
+        -----------
+        xlswb: str
+        intrest: int, float or Series.
+        pension_age: int. Default 67 year.
+        """
+        if (intrest == self.intrest) and (pension_age == self.pension_age):
+            result = self.factors
+        else:
+            result = self.calculate_factors(intrest=intrest, pension_age=pension_age)
+
+        sheets = OrderedDict()
+        sheets['legend'] = self.legend
+        sheets['factors'] = result.unstack(['sex_insured', 'insurance_id'])
+        temp = self.cfs.copy(deep=True)
+        print(temp.head())
+        temp['cf'] = temp['cf'].map(lambda x: x['payments'])
+        cashflows = expand(temp, 'cf')
+        cashflows.set_index(['sex_insured', 'insurance_id', 'age_insured', 'year'], inplace=True)
+        sheets['cashflows'] = cashflows.unstack(['sex_insured', 'insurance_id'])
+        sheets['yield_curve'] = pd.DataFrame(data=120 * [intrest], columns=['intrest'])
+        sheets['lx'] = pd.concat([self.lx['M'], self.lx['F']], axis=1)
+        sheets['hx'] = pd.concat([self.hx['M'], self.hx['F']], axis=1)
+        adjustments = pd.read_excel(XLSWB, sheetname='tbl_adjustments')
+        sheets['adjustments'] = adjustments[adjustments['id'] == self.params['adjustments']]
+
+        # write everything to Excel
+        writer = pd.ExcelWriter(xlswb)
+        for sheetname, content in sheets.iteritems():
+            content.to_excel(writer, sheetname)
+        writer.save()
+
+        msg = "Ready. See {} for output".format(xlswb)
+        print(msg)
