@@ -1,11 +1,11 @@
 from __future__ import print_function
-import sys
-sys.path.append('/home/pieter/projects/factors')
+
 import numpy as np
 import pandas as pd
-from utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
-from settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS
+
 from collections import OrderedDict
+from settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS
+from utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
 
 
 class LifeTable(object):
@@ -281,7 +281,7 @@ class LifeTable(object):
         if (intrest is None):
             msg1 = "Undefined partner cashflows require intrest"
             msg2 = "-- defaults intrest = 3pct"
-            print("{} {}".format(msg1, msg2))
+            print("{0} {1}".format(msg1, msg2))
             intrest = 3  # default = 3 pct intrest rate!
 
         hx_pd = kwargs.get('hx_pd', None)
@@ -428,7 +428,7 @@ class LifeTable(object):
             year = year + 0.5 * (year <= nyears_till_pension_age)
             pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
         else:
-            print("---ERROR: cannot process insurance_id: {}".format(insurance_id))
+            print("---ERROR: cannot process insurance_id: {0}".format(insurance_id))
 
         present_value = sum(cfs * pv_factors)
         rounding = self.params['round']
@@ -480,8 +480,7 @@ class LifeTable(object):
                           row.pension_age,
                           intrest=row.intrest)
             calculated = self.pv(cfs, row.intrest)
-            print("#{} -- {} -- {}".format(row.Index, row.insurance_id, row.test_value - calculated))
-
+            print("#{0} -- {1} -- {2}".format(row.Index, row.insurance_id, row.test_value - calculated))
 
     def calculate_cashflows(self, pension_age, intrest=3):
         """ Returns table with cashflows per insurance_id and age.
@@ -562,5 +561,5 @@ class LifeTable(object):
             content.to_excel(writer, sheetname)
         writer.save()
 
-        msg = "Ready. See {} for output".format(xlswb)
+        msg = "Ready. See {0} for output".format(xlswb)
         print(msg)
