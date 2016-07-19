@@ -5,7 +5,7 @@ from models import LifeTable
 from utils import to_excel
 
 if __name__ == '__main__':
-    tab = LifeTable('AEG2011')
+    tab = LifeTable('GB0005WO')
 
     # run test
     testresults = tab.run_test()
@@ -23,4 +23,4 @@ if __name__ == '__main__':
                    2.630, 2.637, 2.644, 2.650, 2.657, 2.663, 2.669, 2.675, 2.681, 2.687,
                    2.692, 2.698, 2.703, 2.709, 2.714, 2.719, 2.724, 2.729, 2.733, 2.738]
 
-    tab.export('AegonFactors.xlsx', intrest=yield_curve, pension_age=67)
+    # tab.export('AegonFactors.xlsx', intrest=yield_curve, pension_age=67)
