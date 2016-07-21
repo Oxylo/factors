@@ -40,13 +40,13 @@ class LifeTable(object):
         df = pd.read_excel(self.xlswb, sheetname='tbl_lx')
         df.set_index(['id', 'gender', 'age'], inplace=True)
         select = int(self.params['lx'])
-        return {gender: df.ix[select].ix[gender] for gender in ('MALE', 'FEMALE')}
+        return {gender: df.ix[select].ix[gender] for gender in (MALE, FEMALE)}
 
     def get_hx(self):
         df = pd.read_excel(self.xlswb, sheetname='tbl_hx')
         df.set_index(['id', 'gender', 'age'], inplace=True)
         select = int(self.params['hx'])
-        return {gender: df.ix[select].ix[gender] for gender in ('MALE', 'FEMALE')}
+        return {gender: df.ix[select].ix[gender] for gender in (MALE, FEMALE)}
 
     def get_adjustments(self):
         df = pd.read_excel(self.xlswb, sheetname='tbl_adjustments')
@@ -134,13 +134,13 @@ class LifeTable(object):
         insurance_type: either 'partner' or 'risk. Default 'partner'
         """
         insurance_type = kwargs.get('insurance_type', 'partner')
-        assert sex_insured in ('MALE', 'FEMALE'), "sex insured should be either M of F!"
-        sex_beneficiary = 'FEMALE' if sex_insured == 'MALE' else 'MALE'
+        assert sex_insured in (MALE, FEMALE), "sex insured should be either M of F!"
+        sex_beneficiary = FEMALE if sex_insured == MALE else MALE
         delta = int(self.params['delta'])
-        sign = 1 if sex_insured == 'MALE' else -1
+        sign = 1 if sex_insured == MALE else -1
         gamma3 = self.adjust[sex_beneficiary][insurance_type]['CX3']
-        tbl_beneficiary = (self.lx['FEMALE']['lx'] if sex_insured == 'MALE'
-                           else self.lx['MALE']['lx'])
+        tbl_beneficiary = (self.lx[FEMALE]['lx'] if sex_insured == MALE
+                           else self.lx[MALE]['lx'])
         cf_ay_avg = (self.cf_annuity(age_insured - sign * delta + gamma3,
                      tbl_beneficiary) + self.cf_annuity(age_insured +
                      1 - sign * delta + gamma3, tbl_beneficiary)) / 2.
@@ -171,8 +171,8 @@ class LifeTable(object):
         intrest: int, float of Series.
         """
 
-        s = pd.DataFrame({'gender': (UPAGE - LOWAGE) * ['MALE'] +
-                         (UPAGE - LOWAGE) * ['FEMALE'],
+        s = pd.DataFrame({'gender': (UPAGE - LOWAGE) * [MALE] +
+                         (UPAGE - LOWAGE) * [FEMALE],
                          'age': range(LOWAGE, UPAGE) + range(LOWAGE, UPAGE)
                           })
         s['ay_avg'] = s.apply(lambda row: self.ay_avg(row['age'],
@@ -226,8 +226,8 @@ class LifeTable(object):
         sex_insured: either 'M' of 'F'
         pension_age: int
         """
-        assert sex_insured in ('MALE', 'FEMALE'), "sex insured should be either M of F!"
-        sex_beneficiary = 'FEMALE' if sex_insured == 'MALE' else 'MALE'
+        assert sex_insured in (MALE, FEMALE), "sex insured should be either M of F!"
+        sex_beneficiary = FEMALE if sex_insured == MALE else MALE
         tbl_insured = self.lx[sex_insured]['lx']
         tbl_beneficiary = self.lx[sex_beneficiary]['lx']
         delta = int(self.params['delta'])
@@ -236,7 +236,7 @@ class LifeTable(object):
         alpha1 = self.adjust[sex_insured]['partner']['CX1']
         alpha2 = self.adjust[sex_insured]['partner']['CX2']
         gamma3 = self.adjust[sex_beneficiary]['partner']['CX3']
-        sign = 1 if sex_insured == 'MALE' else -1
+        sign = 1 if sex_insured == MALE else -1
         ay = self.cf_annuity(age_insured - sign * delta + gamma3,
                              tbl_beneficiary)
         ax = self.cf_annuity(age_insured + alpha1, tbl_insured)
@@ -275,7 +275,7 @@ class LifeTable(object):
         or 'ukv' for Aegon methodology (depreciated).
 
         """
-        assert sex_insured in ('MALE', 'FEMALE'), "sex insured should be either M of F!"
+        assert sex_insured in (MALE, FEMALE), "sex insured should be either M of F!"
 
         intrest = kwargs.get('intrest', None)
         if (intrest is None):
@@ -352,7 +352,7 @@ class LifeTable(object):
         alpha1 = self.adjust[sex_insured]['partner']['CX1']
         fnett, fcorr, fOTS = (self.adjust[sex_insured]['partner'][item]
                               for item in ['fnett', 'fcorr', 'fOTS'])
-        assert sex_insured in ('MALE', 'FEMALE'), "sex insured should be either M of F!"
+        assert sex_insured in (MALE, FEMALE), "sex insured should be either M of F!"
 
         cf = self.cf_ay_avg(age_insured, sex_insured, insurance_type='partner')
         qx = self.qx(age_insured + alpha1, sex_insured)
@@ -492,7 +492,7 @@ class LifeTable(object):
         """
 
         # create table layout with all desired tariff combinations
-        df = cartesian(lists=[INSURANCE_IDS, ['MALE', 'FEMALE'], range(LOWAGE, UPAGE)],
+        df = cartesian(lists=[INSURANCE_IDS, [MALE, FEMALE], range(LOWAGE, UPAGE)],
                        colnames=['insurance_id', 'sex_insured', 'age_insured'])
 
         # generate cashflows
@@ -550,8 +550,8 @@ class LifeTable(object):
         cashflows.set_index(['sex_insured', 'insurance_id', 'age_insured', 'year'], inplace=True)
         sheets['cashflows'] = cashflows.unstack(['sex_insured', 'insurance_id'])
         sheets['yield_curve'] = pd.DataFrame(self.yield_curve, columns=['intrest'])
-        sheets['lx'] = pd.concat([self.lx['MALE'], self.lx['FEMALE']], axis=1)
-        sheets['hx'] = pd.concat([self.hx['MALE'], self.hx['FEMALE']], axis=1)
+        sheets['lx'] = pd.concat([self.lx[MALE], self.lx[FEMALE]], axis=1)
+        sheets['hx'] = pd.concat([self.hx[MALE], self.hx[FEMALE]], axis=1)
         adjustments = pd.read_excel(XLSWB, sheetname='tbl_adjustments')
         sheets['adjustments'] = adjustments[adjustments['id'] == self.params['adjustments']]
 
