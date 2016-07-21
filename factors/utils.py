@@ -1,6 +1,6 @@
+import itertools
 import numpy as np
 import pandas as pd
-import itertools
 
 
 def merge_two_dicts(x, y):

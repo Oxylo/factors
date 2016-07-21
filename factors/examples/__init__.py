@@ -1,11 +1,9 @@
-import sys
-sys.path.append('/home/pieter/projects/factors')
+from factors.models import LifeTable
+from factors.utils import to_excel
 
-from models import LifeTable
-from utils import to_excel
 
-if __name__ == '__main__':
-    tab = LifeTable('GB0005WO')
+def example1():
+    tab = LifeTable('AEG2011')
 
     # run test
     testresults = tab.run_test()
