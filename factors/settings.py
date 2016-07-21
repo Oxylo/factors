@@ -1,5 +1,7 @@
 import os
 
+MALE = 'M'
+FEMALE = 'F'
 
 LOWAGE = 15
 UPAGE = 70
