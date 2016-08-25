@@ -390,7 +390,7 @@ class LifeTable(object):
 
         switcher = {'OPLL': {'call': self.cf_retirement_pension, 'hx_pd': None},
                     'NPLL-B': {'call': self.cf_defined_partner, 'hx_pd': None},
-                    'NPLL-O': {'call': self.cf_undefined_partner, 'hx_pd': None},
+                    'NPLL-O': {'call': self.cf_undefined_partner, 'hx_pd': 'non-exchangable'},
                     'NPLLRS': {'call': self.cf_undefined_partner, 'hx_pd': 'one'},
                     'NPLLRU': {'call': self.cf_undefined_partner, 'hx_pd': 'ukv'},
                     'NPTL-B': {'call': self.cf_defined_one_year_risk, 'hx_pd': None},
