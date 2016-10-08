@@ -64,6 +64,7 @@ def flatten_generation_table(data):
     for gender in [settings.MALE, settings.FEMALE]:
         df = diagonals_to_columns(data[gender])
         df = qx_to_npx(df)
+        df.fillna(1, inplace=True)
         lx_tables[gender] = stack_columns(df)
     return lx_tables
 
@@ -71,7 +72,7 @@ def flatten_generation_table(data):
 def get_lx(lx_tables, current_age):
     """ Return lx_table for given current age
     """
-    return {gender : lx_tables[gender].ix[current_age] for gender in [settings.MALE, settings.FEMALE]}
+    return {gender: lx_tables[gender].ix[current_age] for gender in [settings.MALE, settings.FEMALE]}
 
 
 if __name__ == "__main__":
@@ -82,7 +83,4 @@ if __name__ == "__main__":
 
     data = read_generation_table(xlswb, sheetname, calc_year)
     lx = flatten_generation_table(data)
-
-    # print(lx)
-    print(data['M'][calc_year])
-    print(data['M'][calc_year].ix[1])
+    print(lx)
