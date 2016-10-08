@@ -10,10 +10,11 @@ from utils_extra import read_generation_table, flatten_generation_table
 
 
 class LifeTable(object):
-    def __init__(self, tablename, xlswb=XLSWB):
+    def __init__(self, tablename, **kwargs):
         self.warning = self.prn_warning()
         self.tablename = tablename
-        self.xlswb = xlswb
+        self.xlswb = kwargs.get('xlswb', XLSWB)
+        self.calc_year = kwargs.get('calc_year', 2017)
         self.legend = self.get_legend()
         self.params = self.get_parameters()
         self.generation_table = self.read_generation_table()
@@ -48,7 +49,7 @@ class LifeTable(object):
             return None
         else:
             return read_generation_table(self.xlswb, self.params['lx'],
-                                         calc_year=2017)
+                                         self.calc_year)
 
     def get_lx_table(self):
         if self.params['is_flat']:
