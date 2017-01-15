@@ -6,15 +6,20 @@ import pandas as pd
 from collections import OrderedDict
 from factors.settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS, MALE, FEMALE
 from factors.utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
+from factors.utils_extra import read_generation_table, flatten_generation_table
 
 
 class LifeTable(object):
-    def __init__(self, tablename, xlswb=XLSWB):
+    def __init__(self, tablename, **kwargs):
+        self.warning = self.prn_warning()
         self.tablename = tablename
-        self.xlswb = xlswb
+        self.xlswb = kwargs.get('xlswb', XLSWB)
+        self.calc_year = kwargs.get('calc_year', 2017)
         self.legend = self.get_legend()
         self.params = self.get_parameters()
-        self.lx = self.get_lx()
+        self.generation_table = self.read_generation_table()
+        self.lx_table = self.get_lx_table()
+        self.lx = self.get_lx  # no call as this function is called later!
         self.hx = self.get_hx()
         self.adjust = self.get_adjustments()
         self.ukv = self.get_ukv()
@@ -26,6 +31,9 @@ class LifeTable(object):
         self.factors = None
         self.yield_curve = None
 
+    def prn_warning(self):
+        print("*** WARNING: feature branch version!")
+
     def get_legend(self):
         df = pd.read_excel(self.xlswb, sheetname='tbl_insurance_types')
         df.set_index('id_type', inplace=True)
@@ -36,11 +44,31 @@ class LifeTable(object):
         df.set_index('name', inplace=True)
         return df.ix[self.tablename].to_dict()
 
-    def get_lx(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_lx')
-        df.set_index(['id', 'gender', 'age'], inplace=True)
-        select = int(self.params['lx'])
-        return {gender: df.ix[select].ix[gender] for gender in (MALE, FEMALE)}
+    def read_generation_table(self):
+        if self.params['is_flat']:
+            return None
+        else:
+            return read_generation_table(self.xlswb, self.params['lx'],
+                                         self.calc_year)
+
+    def get_lx_table(self):
+        if self.params['is_flat']:
+            df = pd.read_excel(self.xlswb, sheetname='tbl_lx')
+            df.set_index(['id', 'gender', 'age'], inplace=True)
+            select = int(self.params['lx'])
+            out = {gender: df.ix[select].ix[gender] for gender in (MALE, FEMALE)}
+        else:
+            out = flatten_generation_table(self.generation_table)
+        return out
+
+    def get_lx(self, current_age):
+        """ Return lx_table for given current age
+        """
+        if self.params['is_flat']:
+            out = self.lx_table
+        else:
+            out = {gender: self.lx_table[gender].ix[current_age] for gender in [MALE, FEMALE]}
+        return out
 
     def get_hx(self):
         df = pd.read_excel(self.xlswb, sheetname='tbl_hx')
@@ -82,8 +110,9 @@ class LifeTable(object):
         """
         future_age = np.minimum(age + nyears, MAXAGE)
         current_age = np.minimum(age, MAXAGE)
-        return (float(self.lx[sex].ix[future_age]['lx']) /
-                self.lx[sex].ix[current_age]['lx'])
+        lx = self.lx(current_age)
+        return (float(lx[sex].ix[future_age]['lx']) /
+                lx[sex].ix[current_age]['lx'])
 
     def qx(self, age, sex):
         """Returns the probability that person with given age will die within 1 year.
@@ -139,11 +168,13 @@ class LifeTable(object):
         delta = int(self.params['delta'])
         sign = 1 if sex_insured == MALE else -1
         gamma3 = self.adjust[sex_beneficiary][insurance_type]['CX3']
-        tbl_beneficiary = (self.lx[FEMALE]['lx'] if sex_insured == MALE
-                           else self.lx[MALE]['lx'])
-        cf_ay_avg = (self.cf_annuity(age_insured - sign * delta + gamma3,
-                     tbl_beneficiary) + self.cf_annuity(age_insured +
-                     1 - sign * delta + gamma3, tbl_beneficiary)) / 2.
+        current_age_beneficiary = age_insured - sign * delta + gamma3
+        lx = self.lx(current_age_beneficiary)
+        tbl_beneficiary = (lx[FEMALE]['lx'] if sex_insured == MALE
+                           else lx[MALE]['lx'])
+        cf_ay_avg = (self.cf_annuity(current_age_beneficiary,
+                     tbl_beneficiary) + self.cf_annuity(
+                     current_age_beneficiary + 1, tbl_beneficiary)) / 2.
         cf_ay_avg = prae_to_continuous(cf_ay_avg)
         return {'payments': cf_ay_avg}
 
@@ -202,9 +233,11 @@ class LifeTable(object):
         """
         postnumerando = (kwargs['postnumerando'] if
                          'postnumerando' in kwargs else False)
-        tbl_insured = self.lx[sex_insured]['lx']
+
         alpha1 = self.adjust[sex_insured]['retire']['CX1']
         alpha2 = self.adjust[sex_insured]['retire']['CX2']
+        lx = self.lx(age_insured + alpha2)
+        tbl_insured = lx[sex_insured]['lx']
         fnett, fcorr, fOTS = (self.adjust[sex_insured]['retire'][item]
                               for item in ['fnett', 'fcorr', 'fOTS'])
         cf = self.cf_annuity(age_insured + alpha2, tbl_insured,
@@ -228,33 +261,48 @@ class LifeTable(object):
         """
         assert sex_insured in (MALE, FEMALE), "sex insured should be either M of F!"
         sex_beneficiary = FEMALE if sex_insured == MALE else MALE
-        tbl_insured = self.lx[sex_insured]['lx']
-        tbl_beneficiary = self.lx[sex_beneficiary]['lx']
-        delta = int(self.params['delta'])
-        fnett, fcorr, fOTS = (self.adjust[sex_insured]['partner'][item]
-                              for item in ['fnett', 'fcorr', 'fOTS'])
+
         alpha1 = self.adjust[sex_insured]['partner']['CX1']
         alpha2 = self.adjust[sex_insured]['partner']['CX2']
         gamma3 = self.adjust[sex_beneficiary]['partner']['CX3']
         sign = 1 if sex_insured == MALE else -1
-        ay = self.cf_annuity(age_insured - sign * delta + gamma3,
+        delta = int(self.params['delta'])
+
+        current_age_alpha1 = age_insured + alpha1
+        current_age_alpha2 = age_insured + alpha2
+        current_age_beneficiary = age_insured - sign * delta + gamma3
+
+        lx_insured_alpha1 = self.lx(current_age_alpha1)
+        lx_insured_alpha2 = self.lx(current_age_alpha2)
+        lx_beneficiary = self.lx(current_age_beneficiary)
+
+        tbl_insured_alpha1 = lx_insured_alpha1[sex_insured]['lx']
+        tbl_insured_alpha2 = lx_insured_alpha2[sex_insured]['lx']
+        tbl_beneficiary = lx_beneficiary[sex_beneficiary]['lx']
+
+        fnett, fcorr, fOTS = (self.adjust[sex_insured]['partner'][item]
+                              for item in ['fnett', 'fcorr', 'fOTS'])
+
+        ay = self.cf_annuity(current_age_beneficiary,
                              tbl_beneficiary)
-        ax = self.cf_annuity(age_insured + alpha1, tbl_insured)
+        ax = self.cf_annuity(current_age_alpha1, tbl_insured_alpha1)
         axy = ax.multiply(ay)
-        f1 = self.cf_annuity(age_insured + alpha1, tbl_insured,
+
+        f1 = self.cf_annuity(current_age_alpha1, tbl_insured_alpha1,
                              pension_age - age_insured)
-        f1 = f1 * self.cf_annuity(age_insured - sign * delta + gamma3,
+        f1 = f1 * self.cf_annuity(current_age_beneficiary,
                                   tbl_beneficiary, pension_age - age_insured)
-        f2 = self.cf_annuity(age_insured + alpha2,
-                             tbl_insured, pension_age - age_insured)
-        f2 = f2 * self.cf_annuity(age_insured - sign * delta + gamma3,
+        f2 = self.cf_annuity(current_age_alpha2,
+                             tbl_insured_alpha2, pension_age - age_insured)
+        f2 = f2 * self.cf_annuity(current_age_beneficiary,
                                   tbl_beneficiary, pension_age - age_insured)
-        temp1 = ((float(tbl_insured.ix[pension_age + alpha1]) /
-                 tbl_insured.ix[age_insured + alpha1]))
-        temp2 = ((float(tbl_insured.ix[age_insured + alpha2]) /
-                 tbl_insured.ix[pension_age + alpha2]))
+        temp1 = ((float(tbl_insured_alpha1.ix[pension_age + alpha1]) /
+                 tbl_insured_alpha1.ix[current_age_alpha1]))
+        temp2 = ((float(tbl_insured_alpha2.ix[current_age_alpha2]) /
+                 tbl_insured_alpha2.ix[pension_age + alpha2]))
         f2 = f2 * temp1 * temp2
         out = fnett * fcorr * fOTS * (ay - axy + (f1 - f2))
+        # print(ay, axy, f1, f2)
         return {'payments': out}
 
     def cf_undefined_partner(self, age_insured, sex_insured,
@@ -550,7 +598,7 @@ class LifeTable(object):
         cashflows.set_index(['sex_insured', 'insurance_id', 'age_insured', 'year'], inplace=True)
         sheets['cashflows'] = cashflows.unstack(['sex_insured', 'insurance_id'])
         sheets['yield_curve'] = pd.DataFrame(self.yield_curve, columns=['intrest'])
-        sheets['lx'] = pd.concat([self.lx[MALE], self.lx[FEMALE]], axis=1)
+        sheets['lx'] = pd.concat([self.lx_table[MALE], self.lx_table[FEMALE]], axis=1)
         sheets['hx'] = pd.concat([self.hx[MALE], self.hx[FEMALE]], axis=1)
         adjustments = pd.read_excel(XLSWB, sheetname='tbl_adjustments')
         sheets['adjustments'] = adjustments[adjustments['id'] == self.params['adjustments']]
