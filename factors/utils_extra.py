@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import settings
+from factors import settings
 
 # AG2014 characteristics
 STARTYEAR = 2014
