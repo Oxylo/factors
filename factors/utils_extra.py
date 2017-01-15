@@ -83,4 +83,22 @@ if __name__ == "__main__":
 
     data = read_generation_table(xlswb, sheetname, calc_year)
     lx = flatten_generation_table(data)
-    print(lx)
+
+    # print(lx['M'].ix[67])
+    writer = pd.ExcelWriter('output.xlsx')
+    # for combi in [('M', 66), ('M', 67), ('F', 63), ('F', 64)]:
+    """
+    for combi in [('M', 49)]:
+        gender = combi[0]
+        current_age = combi[1]
+        df = lx[gender].ix[current_age]
+        df.to_excel(writer, gender + str(current_age))
+    writer.save()
+    """
+    for sex in ['M', 'F']:
+        df = lx[sex]
+        df['qx'] = (df['lx'] - df['lx'].shift(-1).fillna(0)) / df['lx']
+        print(df)
+        df.to_excel(writer, sex)
+    writer.save()
+

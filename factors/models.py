@@ -302,6 +302,7 @@ class LifeTable(object):
                  tbl_insured_alpha2.ix[pension_age + alpha2]))
         f2 = f2 * temp1 * temp2
         out = fnett * fcorr * fOTS * (ay - axy + (f1 - f2))
+        # print(ay, axy, f1, f2)
         return {'payments': out}
 
     def cf_undefined_partner(self, age_insured, sex_insured,
