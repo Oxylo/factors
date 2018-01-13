@@ -1,0 +1,30 @@
+- type: parallel
+  name: test
+  steps:
+  - name: dhfgen -v
+    service: app
+    command: pipenv run python dhfgen -v
+  - name: pytest
+    service: app
+    command: pipenv run pytest
+  - name: flake8
+    service: app
+    command: pipenv run flake8
+  - name: setup.py bdist_wheel
+    service: app
+    command: pipenv run python setup.py bdist_wheel
+  - name: pipenv check
+    service: app
+    command: pipenv check
+  - name: mypy
+    service: app
+    command: pipenv run mypy .
+  - name: conda build
+    service: app
+    command: conda build . -c conda-forge --output-folder dist
+  - name: dhfgen lint
+    service: app
+    command: pipenv run dhfgen lint
+  - name: dhfgen compile
+    service: app
+    command: pipenv run dhfgen compile --output=dhf-build --junitxml=pytest-results.xml --revcode=$CI_COMMIT_ID --revtitle=$CI_COMMIT_ID

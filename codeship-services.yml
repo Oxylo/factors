@@ -1,0 +1,7 @@
+app:
+  build:
+    dockerfile: Dockerfile
+  cached: true
+  environment:
+    INCLUDE_LOCAL_VERSION: 1
+    ENSURE_PRERELEASE: 1

@@ -1,0 +1,50 @@
+platform: x64
+
+cache:
+  - C:\Miniconda36-x64\pkgs -> .ci/packages.conda
+  - '%LOCALAPPDATA%\pip\cache -> Pipfile'
+
+install:
+  - set PATH=C:\Miniconda36-x64\Scripts;C:\Miniconda36-x64;%PATH%
+  - > 
+    python .ci\parallel.py -j 3 
+    "conda install --file .ci/packages.conda --yes && conda list"
+    "pip install pipenv --upgrade && pipenv install --dev && pipenv graph" 
+
+before_build:
+  - ps: |
+      $version = pipenv run python setup.py compile-version
+      Update-AppveyorBuild -Version $version
+
+build_script:
+  # build python wheel
+  # build conda package
+  # check for security vulnerabilities and against PEP 508 markers provided in Pipfile.
+  # if the package was installed in editable mode successfully, we should be able to report version
+  # run test suite and output test results to a file
+  # linting
+  - > 
+    python .ci\parallel.py -j 6 
+    "pipenv run python setup.py bdist_wheel" 
+    "pipenv check"
+    "pipenv run python factors -v"
+    "pipenv run pytest --junitxml=pytest-results.xml" 
+    "pipenv run flake8" 
+    "pipenv run mypy ."
+
+test_script:
+  - pipenv run factors -v
+  - pipenv run pytest --junitxmxl=pytest-results.xml
+
+on_finish:
+  # upload our pytest results so they show up in the appveyor Tests tab
+  - ps: |
+      $filepath = ".\pytest-results.xml";
+      if(Test-Path $filepath) {
+        $wc = New-Object 'System.Net.WebClient';
+        $wc.UploadFile("https://ci.appveyor.com/api/testresults/junit/$($env:APPVEYOR_JOB_ID)", (Resolve-Path $filepath));
+      }
+
+artifacts:
+  - path: dist/*.whl
+    name: python wheel
