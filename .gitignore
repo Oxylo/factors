@@ -1,11 +1,35 @@
 env
+
+# macOS
 *.DS_Store
+
+.cache
+
+# compiled python files
 *.pyc
+*.egg-info
+
+# eggs
+*.egg-info
+*.eggs
+
 *.xlsx
 # Setuptools distribution folder.
 /dist/
-# Python egg metadata, regenerated from source files by setuptools.
-/*.egg-info
-/.eggs
-# Pycharm
-.idea/*
+
+# pypi
+.pypirc
+
+# IDEs
+.vscode
+.idea
+
+# distribution
+build
+dist
+
+# mypy
+.mypy_cache
+
+# Jupyter
+*.ipynb
