@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 
 from collections import OrderedDict
-from settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS, MALE, FEMALE
-from utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
-from utils_extra import read_generation_table, flatten_generation_table
+from factors.settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS, MALE, FEMALE
+from factors.utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
+from factors.utils_extra import read_generation_table, flatten_generation_table
 
 
 class LifeTable(object):
