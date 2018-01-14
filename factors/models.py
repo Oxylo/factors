@@ -1,12 +1,20 @@
 from __future__ import print_function
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+import xlrd
 
-from collections import OrderedDict
 from factors.settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS, MALE, FEMALE
 from factors.utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
 from factors.utils_extra import read_generation_table, flatten_generation_table
+
+
+REQUIRED_SHEETS = ['tbl_insurance_types',
+                   'tbl_tariff',
+                   'tbl_lx',
+                   'tbl_hx',
+                   'tbl_adjustments']  # optional: tbl_ukv and tbl_testdata
 
 
 class LifeTable(object):
@@ -147,6 +155,7 @@ class LifeTable(object):
         """
         nrows = len(lx)
         assert nrows > defer, "Error: deferral period exceeds number of table rows."
+        age = int(age)  # We can't index with floats
         payments = pd.Series(defer * [0] + (nrows - defer) * [1])
         out = (payments * lx.shift(-age) / lx.ix[age]).fillna(0)
         out.index.rename('year', inplace=True)
@@ -201,10 +210,9 @@ class LifeTable(object):
         -----------
         intrest: int, float of Series.
         """
-
         s = pd.DataFrame({'gender': (UPAGE - LOWAGE) * [MALE] +
                          (UPAGE - LOWAGE) * [FEMALE],
-                         'age': range(LOWAGE, UPAGE) + range(LOWAGE, UPAGE)
+                         'age': np.concatenate([np.arange(LOWAGE, UPAGE), np.arange(LOWAGE, UPAGE)])
                           })
         s['ay_avg'] = s.apply(lambda row: self.ay_avg(row['age'],
                               row['gender'], intrest), axis=1)
@@ -611,3 +619,75 @@ class LifeTable(object):
 
         msg = "Ready. See {0} for output".format(xlswb)
         print(msg)
+
+
+class NewLifeTable(LifeTable):
+
+    def __init__(self, tablename, **kwargs):
+        self.warning = self.prn_warning()
+        self.tablename = tablename
+        self.xlswb = kwargs.get('xlswb', XLSWB)
+        self.calc_year = kwargs.get('calc_year', 2017)
+        self.legend = self.get_legend()
+        self.params = self.get_parameters()
+        self.generation_table = self.read_generation_table()
+        self.sheetnames = self.get_sheetnames()
+        self.lx_table = self.get_lx_table()
+        self.lx = self.get_lx  # no call as this function is called later!
+        self.hx = self.get_hx()
+        self.adjust = self.get_adjustments()
+        self.ukv = self.get_ukv() if 'tbl_ukv' in self.get_sheetnames() else None
+        self.testdata = self.get_testdata() if 'tbl_testdata' in self.get_sheetnames() else None
+        self.pension_age = None
+        self.intrest = None
+        self.lookup = None
+        self.cfs = None
+        self.factors = None
+        self.yield_curve = None
+
+    def get_sheetnames(self):
+        wb = xlrd.open_workbook(self.xlswb, on_demand=True)
+        return wb.sheet_names()
+
+    def xls_contains_all_required_sheets(self):
+        return all(x in self.sheetnames for x in REQUIRED_SHEETS)
+
+    def get_legend(self):
+        df = pd.read_excel(self.xlswb, sheetname='tbl_insurance_types')
+        df.set_index('id_type', inplace=True)
+        return df
+
+    def get_parameters(self):
+        df = pd.read_excel(self.xlswb, sheetname='tbl_tariff')
+        # to_dict("records") converts it to a list of dictionaries,
+        # we just want the first item
+        parameters = df.to_dict("records")
+        if len(parameters) != 1:
+            raise ValueError("Parameters has an incorrect format")
+        return parameters[0]
+
+    def get_lx_table(self):
+        if self.params['is_flat']:
+            df = pd.read_excel(self.xlswb, sheetname='tbl_lx')
+            df.set_index(['gender', 'age'], inplace=True)
+            out = {gender: df.ix[gender] for gender in (MALE, FEMALE)}
+        else:
+            out = flatten_generation_table(self.generation_table)
+        return out
+
+    def get_hx(self):
+        df = pd.read_excel(self.xlswb, sheetname='tbl_hx')
+        df.set_index(['gender', 'age'], inplace=True)
+        return {gender: df.ix[gender] for gender in (MALE, FEMALE)}
+
+    def get_adjustments(self):
+        df = pd.read_excel(self.xlswb, sheetname='tbl_adjustments')
+        return dictify(df)
+
+    def get_ukv(self):
+        df = pd.read_excel(self.xlswb, sheetname='tbl_ukv')
+        df.set_index(['gender', 'pension_age', 'intrest'], inplace=True)
+        return df
+
+    def get_testdata(self):
+        return pd.read_excel(self.xlswb, sheetname='tbl_testdata')
