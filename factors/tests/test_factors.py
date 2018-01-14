@@ -1,7 +1,9 @@
-from unittest import TestCase
+from factors import LifeTable
 
 
-class TestFactors(TestCase):
-
-    def test_always_true(self):
-        self.assertTrue(1, 1)
+def test_data():
+    tables = LifeTable("AEG2011")
+    testdata = tables.run_test()
+    assert testdata
+    error_squared = sum(testdata['difference'] * testdata['difference'])
+    assert error_squared < 3.5e-5

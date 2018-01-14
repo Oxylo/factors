@@ -147,6 +147,7 @@ class LifeTable(object):
         """
         nrows = len(lx)
         assert nrows > defer, "Error: deferral period exceeds number of table rows."
+        age = int(age)  # We can't index with floats
         payments = pd.Series(defer * [0] + (nrows - defer) * [1])
         out = (payments * lx.shift(-age) / lx.ix[age]).fillna(0)
         out.index.rename('year', inplace=True)
@@ -201,10 +202,9 @@ class LifeTable(object):
         -----------
         intrest: int, float of Series.
         """
-
         s = pd.DataFrame({'gender': (UPAGE - LOWAGE) * [MALE] +
                          (UPAGE - LOWAGE) * [FEMALE],
-                         'age': range(LOWAGE, UPAGE) + range(LOWAGE, UPAGE)
+                         'age': np.concatenate([np.arange(LOWAGE, UPAGE), np.arange(LOWAGE, UPAGE)])
                           })
         s['ay_avg'] = s.apply(lambda row: self.ay_avg(row['age'],
                               row['gender'], intrest), axis=1)
