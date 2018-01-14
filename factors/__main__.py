@@ -37,7 +37,7 @@ def main(args=None):
 def cmd_version() -> None:
     """Prints and returns the current version to the command line."""
     from factors import __version__
-    print(f"factors v{__version__}")
+    print("factors v{version}".format(version=__version__))
 
 
 if __name__ == "__main__":

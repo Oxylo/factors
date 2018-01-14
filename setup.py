@@ -1,13 +1,13 @@
 import os
 import re
 
-from setuptools import setup
+from setuptools import find_packages, setup
 
 
 def get_version_from_src():
     with open(os.path.join("factors", "__init__.py"), mode="r") as fh:
         return re.search("__version__\s*=\s*['\"](.*?)['\"]", fh.read()).group(1)
-    
+
 
 def readme():
     with open('README.rst') as f:
@@ -17,7 +17,11 @@ def readme():
 setup(
     name='factors',
     version=get_version_from_src(),
-    packages=["factors"],
+    packages=find_packages(),
+    # package_data={
+    #     "factors.data": ["*.xls", "*.xlsx"]
+    # },
+    include_package_data=True,
     entry_points={
         'console_scripts': [
             'factors=factors.__main__:main'

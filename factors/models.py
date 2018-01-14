@@ -613,12 +613,11 @@ class LifeTable(object):
         sheets['yield_curve'] = pd.DataFrame(self.yield_curve, columns=['intrest'])
         sheets['lx'] = pd.concat([self.lx_table[MALE], self.lx_table[FEMALE]], axis=1)
         sheets['hx'] = pd.concat([self.hx[MALE], self.hx[FEMALE]], axis=1)
-        adjustments = self.get_adjustments()   # FIXME This returns a dict not a table!
-        sheets['adjustments'] = adjustments[adjustments['id'] == self.params['adjustments']]
+        sheets['adjustments'] = pd.read_excel(self.excel_filepath, sheetname='tbl_adjustments')
 
         # write everything to Excel
         writer = pd.ExcelWriter(xlswb)
-        for sheet_name, content in sheets.iteritems():  # TODO In Python 3 this should be items
+        for sheet_name, content in sheets.items():
             content.to_excel(writer, sheet_name)
         writer.save()
 

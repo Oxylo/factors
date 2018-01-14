@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 
@@ -15,6 +16,13 @@ def test_aeg2011_data(aegon_table):
     assert testdata is not None
     error_squared = sum(testdata['difference'] * testdata['difference'])
     assert error_squared < 3.5e-5
+
+
+def test_export(aegon_table):
+    tables = aegon_table
+    tables.export("text.xlsx", intrest=3, pension_age=67)
+    assert os.path.exists("text.xlsx")
+    # TODO Load Excel sheet and check that it's correct
 
 
 def test_single_person(aegon_table):
