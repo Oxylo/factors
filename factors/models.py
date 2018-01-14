@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import xlrd
 
-from factors.settings import DATADIR, UPAGE, LOWAGE, MAXAGE, INSURANCE_IDS, MALE, FEMALE
+from factors.settings import UPAGE, LOWAGE, MAXAGE, INSURANCE_IDS, MALE, FEMALE
 from factors.utils import (dictify, get_excel_filepath, prae_to_continuous, merge_two_dicts, cartesian, expand,
                            x_to_series)
 from factors.utils_extra import read_generation_table, flatten_generation_table
@@ -29,13 +29,13 @@ class LifeTable(object):
         self.legend = self.get_legend()
         self.params = self.get_parameters()
         self.generation_table = self.read_generation_table()
-        self.sheetnames = self.get_sheetnames()
+        self.sheet_names = self.get_sheet_names()
         self.lx_table = self.get_lx_table()
         self.lx = self.get_lx  # no call as this function is called later!
         self.hx = self.get_hx()
         self.adjust = self.get_adjustments()
-        self.ukv = self.get_ukv() if 'tbl_ukv' in self.get_sheetnames() else None
-        self.testdata = self.get_testdata() if 'tbl_testdata' in self.get_sheetnames() else None
+        self.ukv = self.get_ukv() if 'tbl_ukv' in self.get_sheet_names() else None
+        self.testdata = self.get_testdata() if 'tbl_testdata' in self.get_sheet_names() else None
         self.pension_age = None
         self.intrest = None
         self.lookup = None
@@ -43,23 +43,23 @@ class LifeTable(object):
         self.factors = None
         self.yield_curve = None
 
-    def get_sheetnames(self):
+    def get_sheet_names(self):
         wb = xlrd.open_workbook(self.excel_filepath, on_demand=True)
         return wb.sheet_names()
 
     def xls_contains_all_required_sheets(self):
-        return all(x in self.sheetnames for x in REQUIRED_SHEETS)
+        return all(x in self.sheet_names for x in REQUIRED_SHEETS)
 
     def prn_warning(self):
         print("*** WARNING: feature branch version!")
 
     def get_legend(self):
-        df = pd.read_excel(self.excel_filepath, sheetname='tbl_insurance_types')
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_insurance_types')
         df.set_index('id_type', inplace=True)
         return df
 
     def get_parameters(self):
-        df = pd.read_excel(self.excel_filepath, sheetname='tbl_tariff')
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_tariff')
         # to_dict("records") converts it to a list of dictionaries,
         # we just want the first item
         parameters = df.to_dict("records")
@@ -76,7 +76,7 @@ class LifeTable(object):
 
     def get_lx_table(self):
         if self.params['is_flat']:
-            df = pd.read_excel(self.excel_filepath, sheetname='tbl_lx')
+            df = pd.read_excel(self.excel_filepath, sheet_name='tbl_lx')
             df.set_index(['gender', 'age'], inplace=True)
             out = {gender: df.ix[gender] for gender in (MALE, FEMALE)}
         else:
@@ -93,21 +93,21 @@ class LifeTable(object):
         return out
 
     def get_hx(self):
-        df = pd.read_excel(self.excel_filepath, sheetname='tbl_hx')
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_hx')
         df.set_index(['gender', 'age'], inplace=True)
         return {gender: df.ix[gender] for gender in (MALE, FEMALE)}
 
     def get_adjustments(self):
-        df = pd.read_excel(self.excel_filepath, sheetname='tbl_adjustments')
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_adjustments')
         return dictify(df)
 
     def get_ukv(self):
-        df = pd.read_excel(self.excel_filepath, sheetname='tbl_ukv')
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_ukv')
         df.set_index(['gender', 'pension_age', 'intrest'], inplace=True)
         return df
 
     def get_testdata(self):
-        return pd.read_excel(self.excel_filepath, sheetname='tbl_testdata')
+        return pd.read_excel(self.excel_filepath, sheet_name='tbl_testdata')
 
     def npx(self, age, sex, nyears):
         """Returns probability person with given age is still alive after n years.
@@ -613,13 +613,13 @@ class LifeTable(object):
         sheets['yield_curve'] = pd.DataFrame(self.yield_curve, columns=['intrest'])
         sheets['lx'] = pd.concat([self.lx_table[MALE], self.lx_table[FEMALE]], axis=1)
         sheets['hx'] = pd.concat([self.hx[MALE], self.hx[FEMALE]], axis=1)
-        adjustments = pd.read_excel(XLSWB, sheetname='tbl_adjustments')
+        adjustments = self.get_adjustments()   # FIXME This returns a dict not a table!
         sheets['adjustments'] = adjustments[adjustments['id'] == self.params['adjustments']]
 
         # write everything to Excel
         writer = pd.ExcelWriter(xlswb)
-        for sheetname, content in sheets.iteritems():
-            content.to_excel(writer, sheetname)
+        for sheet_name, content in sheets.iteritems():  # TODO In Python 3 this should be items
+            content.to_excel(writer, sheet_name)
         writer.save()
 
         msg = "Ready. See {0} for output".format(xlswb)

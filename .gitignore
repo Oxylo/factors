@@ -13,7 +13,7 @@ env
 *.egg-info
 *.eggs
 
-*.xlsx
+# *.xlsx
 # Setuptools distribution folder.
 /dist/
 
@@ -33,3 +33,4 @@ dist
 
 # Jupyter
 *.ipynb
+.ipynb_checkpoints

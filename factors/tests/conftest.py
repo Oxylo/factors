@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 from factors import LifeTable
@@ -7,5 +5,9 @@ from factors import LifeTable
 
 @pytest.fixture
 def aegon_table():
-    tables = LifeTable("AEG2011")
-    return tables
+    return LifeTable("AEG2011")
+
+
+@pytest.fixture
+def ag_table():
+    return LifeTable("AG2014")
