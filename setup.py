@@ -1,36 +1,56 @@
-try:
-    from setuptools import setup, find_packages
-except ImportError:
-    from distutils.core import setup, find_packages
+import os
+import re
+
+from setuptools import find_packages, setup
+
+
+def get_version_from_src():
+    with open(os.path.join("factors", "__init__.py"), mode="r") as fh:
+        return re.search("__version__\s*=\s*['\"](.*?)['\"]", fh.read()).group(1)
 
 
 def readme():
-    with open('README.md') as f:
+    with open('README.rst') as f:
         return f.read()
+
 
 setup(
     name='factors',
-    version='0.1',
+    version=get_version_from_src(),
+    packages=find_packages(),
+    # package_data={
+    #     "factors.data": ["*.xls", "*.xlsx"]
+    # },
+    include_package_data=True,
+    entry_points={
+        'console_scripts': [
+            'factors=factors.__main__:main'
+        ]
+    },
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
     ],
     description='Generates actuarial factors for premium calculations.',
     long_description=readme(),
     author='Pieter Marres',
     author_email='pmarres@oxylo.com',
+    maintainer='Pieter Marres',
+    maintainer_email='pmarres@oxylo.com',
     license='MIT',
-    packages=find_packages(),
     url='https://github.com/Oxylo/factors',
+    download_url='https://github.com/Oxylo/factors/archive/0.1.tar.gz',
     zip_safe=False,
-    include_package_data=True,
     install_requires=[
-        'numpy',
+        'numpy',  # TODO pin versions
         'pandas',
         'xlrd',
         'openpyxl',
     ],
-    test_suite='nose.collector',
-    tests_require=['nose'],
+    test_suite='pytest',
+    tests_require=['pytest'],
 )

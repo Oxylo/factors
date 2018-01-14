@@ -1,37 +1,41 @@
 from __future__ import print_function
+
 from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
 import xlrd
 
-from factors.settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS, MALE, FEMALE
-from factors.utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
+from factors.settings import UPAGE, LOWAGE, MAXAGE, INSURANCE_IDS, MALE, FEMALE
+from factors.utils import (dictify, get_excel_filepath, prae_to_continuous, merge_two_dicts, cartesian, expand,
+                           x_to_series)
 from factors.utils_extra import read_generation_table, flatten_generation_table
 
-
-REQUIRED_SHEETS = ['tbl_insurance_types',
-                   'tbl_tariff',
-                   'tbl_lx',
-                   'tbl_hx',
-                   'tbl_adjustments']  # optional: tbl_ukv and tbl_testdata
+REQUIRED_SHEETS = [
+    'tbl_insurance_types',
+    'tbl_tariff',
+    'tbl_lx',
+    'tbl_hx',
+    'tbl_adjustments'
+]  # optional: tbl_ukv and tbl_testdata
 
 
 class LifeTable(object):
     def __init__(self, tablename, **kwargs):
         self.warning = self.prn_warning()
         self.tablename = tablename
-        self.xlswb = kwargs.get('xlswb', XLSWB)
+        self.excel_filepath = get_excel_filepath(tablename=tablename)
         self.calc_year = kwargs.get('calc_year', 2017)
         self.legend = self.get_legend()
         self.params = self.get_parameters()
         self.generation_table = self.read_generation_table()
+        self.sheet_names = self.get_sheet_names()
         self.lx_table = self.get_lx_table()
         self.lx = self.get_lx  # no call as this function is called later!
         self.hx = self.get_hx()
         self.adjust = self.get_adjustments()
-        self.ukv = self.get_ukv()
-        self.testdata = self.get_test_data()
+        self.ukv = self.get_ukv() if 'tbl_ukv' in self.get_sheet_names() else None
+        self.testdata = self.get_testdata() if 'tbl_testdata' in self.get_sheet_names() else None
         self.pension_age = None
         self.intrest = None
         self.lookup = None
@@ -39,32 +43,42 @@ class LifeTable(object):
         self.factors = None
         self.yield_curve = None
 
+    def get_sheet_names(self):
+        wb = xlrd.open_workbook(self.excel_filepath, on_demand=True)
+        return wb.sheet_names()
+
+    def xls_contains_all_required_sheets(self):
+        return all(x in self.sheet_names for x in REQUIRED_SHEETS)
+
     def prn_warning(self):
         print("*** WARNING: feature branch version!")
 
     def get_legend(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_insurance_types')
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_insurance_types')
         df.set_index('id_type', inplace=True)
-        return df.ix[INSURANCE_IDS]
+        return df
 
     def get_parameters(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_tariff')
-        df.set_index('name', inplace=True)
-        return df.ix[self.tablename].to_dict()
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_tariff')
+        # to_dict("records") converts it to a list of dictionaries,
+        # we just want the first item
+        parameters = df.to_dict("records")
+        if len(parameters) != 1:
+            raise ValueError("Parameters has an incorrect format")
+        return parameters[0]
 
     def read_generation_table(self):
         if self.params['is_flat']:
             return None
         else:
-            return read_generation_table(self.xlswb, self.params['lx'],
+            return read_generation_table(self.excel_filepath, self.params['lx'],
                                          self.calc_year)
 
     def get_lx_table(self):
         if self.params['is_flat']:
-            df = pd.read_excel(self.xlswb, sheetname='tbl_lx')
-            df.set_index(['id', 'gender', 'age'], inplace=True)
-            select = int(self.params['lx'])
-            out = {gender: df.ix[select].ix[gender] for gender in (MALE, FEMALE)}
+            df = pd.read_excel(self.excel_filepath, sheet_name='tbl_lx')
+            df.set_index(['gender', 'age'], inplace=True)
+            out = {gender: df.ix[gender] for gender in (MALE, FEMALE)}
         else:
             out = flatten_generation_table(self.generation_table)
         return out
@@ -79,33 +93,21 @@ class LifeTable(object):
         return out
 
     def get_hx(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_hx')
-        df.set_index(['id', 'gender', 'age'], inplace=True)
-        select = int(self.params['hx'])
-        return {gender: df.ix[select].ix[gender] for gender in (MALE, FEMALE)}
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_hx')
+        df.set_index(['gender', 'age'], inplace=True)
+        return {gender: df.ix[gender] for gender in (MALE, FEMALE)}
 
     def get_adjustments(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_adjustments')
-        select = self.params['adjustments']
-        df = df[df['id'] == select]
-        df.drop('id', axis=1, inplace=True)
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_adjustments')
         return dictify(df)
 
     def get_ukv(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_ukv')
-        try:
-            df = df[df['id'] == int(self.params['ukv'])]
-        except ValueError:
-            return None
-        df.drop('id', axis=1, inplace=True)
+        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_ukv')
         df.set_index(['gender', 'pension_age', 'intrest'], inplace=True)
         return df
 
-    def get_test_data(self):
-        df1 = pd.read_excel(self.xlswb, sheetname='tbl_testdata_values')
-        df2 = pd.read_excel(self.xlswb, sheetname='tbl_testdata')
-        out = pd.merge(df1, df2, left_on='testdata_id', right_on='id')
-        return out[out['table'] == self.tablename]
+    def get_testdata(self):
+        return pd.read_excel(self.excel_filepath, sheet_name='tbl_testdata')
 
     def npx(self, age, sex, nyears):
         """Returns probability person with given age is still alive after n years.
@@ -180,10 +182,10 @@ class LifeTable(object):
         current_age_beneficiary = age_insured - sign * delta + gamma3
         lx = self.lx(current_age_beneficiary)
         tbl_beneficiary = (lx[FEMALE]['lx'] if sex_insured == MALE
-                           else lx[MALE]['lx'])
+        else lx[MALE]['lx'])
         cf_ay_avg = (self.cf_annuity(current_age_beneficiary,
-                     tbl_beneficiary) + self.cf_annuity(
-                     current_age_beneficiary + 1, tbl_beneficiary)) / 2.
+                                     tbl_beneficiary) + self.cf_annuity(
+            current_age_beneficiary + 1, tbl_beneficiary)) / 2.
         cf_ay_avg = prae_to_continuous(cf_ay_avg)
         return {'payments': cf_ay_avg}
 
@@ -201,7 +203,7 @@ class LifeTable(object):
         """
         cf_ay_avg = self.cf_ay_avg(age_insured, sex_insured, insurance_type)
         return self.pv({'insurance_id': 'OPLL',
-                       'payments': cf_ay_avg['payments']}, intrest)
+                        'payments': cf_ay_avg['payments']}, intrest)
 
     def create_lookup_table(self, intrest):
         """ Returns a lookup table with age/sex dependent items for undefined partner.
@@ -211,17 +213,17 @@ class LifeTable(object):
         intrest: int, float of Series.
         """
         s = pd.DataFrame({'gender': (UPAGE - LOWAGE) * [MALE] +
-                         (UPAGE - LOWAGE) * [FEMALE],
-                         'age': np.concatenate([np.arange(LOWAGE, UPAGE), np.arange(LOWAGE, UPAGE)])
+                                    (UPAGE - LOWAGE) * [FEMALE],
+                          'age': np.concatenate([np.arange(LOWAGE, UPAGE), np.arange(LOWAGE, UPAGE)])
                           })
         s['ay_avg'] = s.apply(lambda row: self.ay_avg(row['age'],
-                              row['gender'], intrest), axis=1)
+                                                      row['gender'], intrest), axis=1)
         s['hx_avg'] = s.apply(lambda row: (self.hx[row['gender']].ix[row['age']].values[0] +
                                            self.hx[row['gender']].ix[row['age'] + 1].values[0]) / 2., axis=1)
         s['alpha1'] = s.apply(lambda row: self.adjust[row['gender']]['partner']['CX1'], axis=1)
         s['factor'] = s.apply(lambda row: self.adjust[row['gender']]['partner']['fnett'] *
-                              self.adjust[row['gender']]['partner']['fcorr'] *
-                              self.adjust[row['gender']]['partner']['fOTS'],
+                                          self.adjust[row['gender']]['partner']['fcorr'] *
+                                          self.adjust[row['gender']]['partner']['fOTS'],
                               axis=1)
         s['cf'] = s['ay_avg'] * s['hx_avg'] * s['factor']
         s.set_index(['gender', 'age'], inplace=True)
@@ -240,7 +242,7 @@ class LifeTable(object):
         postnumerando: boolean
         """
         postnumerando = (kwargs['postnumerando'] if
-                         'postnumerando' in kwargs else False)
+        'postnumerando' in kwargs else False)
 
         alpha1 = self.adjust[sex_insured]['retire']['CX1']
         alpha2 = self.adjust[sex_insured]['retire']['CX2']
@@ -305,9 +307,9 @@ class LifeTable(object):
         f2 = f2 * self.cf_annuity(current_age_beneficiary,
                                   tbl_beneficiary, pension_age - age_insured)
         temp1 = ((float(tbl_insured_alpha1.ix[pension_age + alpha1]) /
-                 tbl_insured_alpha1.ix[current_age_alpha1]))
+                  tbl_insured_alpha1.ix[current_age_alpha1]))
         temp2 = ((float(tbl_insured_alpha2.ix[current_age_alpha2]) /
-                 tbl_insured_alpha2.ix[pension_age + alpha2]))
+                  tbl_insured_alpha2.ix[pension_age + alpha2]))
         f2 = f2 * temp1 * temp2
         out = fnett * fcorr * fOTS * (ay - axy + (f1 - f2))
         # print(ay, axy, f1, f2)
@@ -366,7 +368,7 @@ class LifeTable(object):
             self.intrest = intrest
 
         cf_till_pension_age = (lookup.ix[sex_insured].
-                               ix[age_insured:pension_age - 1])
+                                   ix[age_insured:pension_age - 1])
         current_age = age_insured  # we need [k]q[current_age]
         cf_till_pension_age['age'] = cf_till_pension_age.index
         nq_current_age = cf_till_pension_age.apply(lambda row:
@@ -378,7 +380,8 @@ class LifeTable(object):
         cf_till_pension_age = pd.DataFrame(cf_till_pension_age, columns=['cf'])
 
         # cf after retirement
-        prob = self.npx(age_insured + lookup['alpha1'].loc[(sex_insured, age_insured)], sex_insured, pension_age - age_insured)
+        prob = self.npx(age_insured + lookup['alpha1'].loc[(sex_insured, age_insured)], sex_insured,
+                        pension_age - age_insured)
         cf_defined_partner = self.cf_defined_partner(pension_age, sex_insured, pension_age)
         cf_after_pension_age = hx_at_pensionage * prob * cf_defined_partner['payments']
         cf_after_pension_age = pd.DataFrame(cf_after_pension_age, columns=['cf'])
@@ -426,7 +429,8 @@ class LifeTable(object):
         pension_age: int
         """
 
-        hx_avg = (self.hx[sex_insured].ix[age_insured].values[0] + self.hx[sex_insured].ix[age_insured + 1].values[0]) / 2.
+        hx_avg = (self.hx[sex_insured].ix[age_insured].values[0] + self.hx[sex_insured].ix[age_insured + 1].values[
+            0]) / 2.
         cf_defined_one_year_risk = self.cf_defined_one_year_risk(age_insured, sex_insured, pension_age, **kwargs)
         cf = hx_avg * cf_defined_one_year_risk['payments']
         return {'insurance_id': 'NPTL-O', 'payments': cf}
@@ -476,13 +480,13 @@ class LifeTable(object):
         self.yield_curve = x_to_series(intrest, len(cfs))
 
         if insurance_id in ['OPLL', 'NPLL-B', 'ay_avg']:
-            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.)) ** year
         elif insurance_id in ['NPTL-B', 'NPTL-O']:
-            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**(year + 0.5)
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.)) ** (year + 0.5)
         elif insurance_id in ['NPLL-O', 'NPLLRS', 'NPLLRU']:
             nyears_till_pension_age = cf['pension_age'] - cf['age']
             year = year + 0.5 * (year <= nyears_till_pension_age)
-            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.)) ** year
         else:
             print("---ERROR: cannot process insurance_id: {0}".format(insurance_id))
 
@@ -558,6 +562,7 @@ class LifeTable(object):
                            sex_insured=row['sex_insured'],
                            pension_age=pension_age,
                            intrest=intrest)
+
         df['cf'] = df.apply(map_to_cf, axis=1)
         self.intrest = intrest
         self.pension_age = pension_age
@@ -608,86 +613,13 @@ class LifeTable(object):
         sheets['yield_curve'] = pd.DataFrame(self.yield_curve, columns=['intrest'])
         sheets['lx'] = pd.concat([self.lx_table[MALE], self.lx_table[FEMALE]], axis=1)
         sheets['hx'] = pd.concat([self.hx[MALE], self.hx[FEMALE]], axis=1)
-        adjustments = pd.read_excel(XLSWB, sheetname='tbl_adjustments')
-        sheets['adjustments'] = adjustments[adjustments['id'] == self.params['adjustments']]
+        sheets['adjustments'] = pd.read_excel(self.excel_filepath, sheet_name='tbl_adjustments')
 
         # write everything to Excel
         writer = pd.ExcelWriter(xlswb)
-        for sheetname, content in sheets.iteritems():
-            content.to_excel(writer, sheetname)
+        for sheet_name, content in sheets.items():
+            content.to_excel(writer, sheet_name)
         writer.save()
 
         msg = "Ready. See {0} for output".format(xlswb)
         print(msg)
-
-
-class NewLifeTable(LifeTable):
-
-    def __init__(self, tablename, **kwargs):
-        self.warning = self.prn_warning()
-        self.tablename = tablename
-        self.xlswb = kwargs.get('xlswb', XLSWB)
-        self.calc_year = kwargs.get('calc_year', 2017)
-        self.legend = self.get_legend()
-        self.params = self.get_parameters()
-        self.generation_table = self.read_generation_table()
-        self.sheetnames = self.get_sheetnames()
-        self.lx_table = self.get_lx_table()
-        self.lx = self.get_lx  # no call as this function is called later!
-        self.hx = self.get_hx()
-        self.adjust = self.get_adjustments()
-        self.ukv = self.get_ukv() if 'tbl_ukv' in self.get_sheetnames() else None
-        self.testdata = self.get_testdata() if 'tbl_testdata' in self.get_sheetnames() else None
-        self.pension_age = None
-        self.intrest = None
-        self.lookup = None
-        self.cfs = None
-        self.factors = None
-        self.yield_curve = None
-
-    def get_sheetnames(self):
-        wb = xlrd.open_workbook(self.xlswb, on_demand=True)
-        return wb.sheet_names()
-
-    def xls_contains_all_required_sheets(self):
-        return all(x in self.sheetnames for x in REQUIRED_SHEETS)
-
-    def get_legend(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_insurance_types')
-        df.set_index('id_type', inplace=True)
-        return df
-
-    def get_parameters(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_tariff')
-        # to_dict("records") converts it to a list of dictionaries,
-        # we just want the first item
-        parameters = df.to_dict("records")
-        if len(parameters) != 1:
-            raise ValueError("Parameters has an incorrect format")
-        return parameters[0]
-
-    def get_lx_table(self):
-        if self.params['is_flat']:
-            df = pd.read_excel(self.xlswb, sheetname='tbl_lx')
-            df.set_index(['gender', 'age'], inplace=True)
-            out = {gender: df.ix[gender] for gender in (MALE, FEMALE)}
-        else:
-            out = flatten_generation_table(self.generation_table)
-        return out
-
-    def get_hx(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_hx')
-        df.set_index(['gender', 'age'], inplace=True)
-        return {gender: df.ix[gender] for gender in (MALE, FEMALE)}
-
-    def get_adjustments(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_adjustments')
-        return dictify(df)
-
-    def get_ukv(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_ukv')
-        df.set_index(['gender', 'pension_age', 'intrest'], inplace=True)
-        return df
-
-    def get_testdata(self):
-        return pd.read_excel(self.xlswb, sheetname='tbl_testdata')

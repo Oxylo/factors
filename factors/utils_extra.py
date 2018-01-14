@@ -1,17 +1,21 @@
+import os
+
 import pandas as pd
 import numpy as np
 from factors import settings
 
 # AG2014 characteristics
+from factors.settings import DATADIR
+
 STARTYEAR = 2014
 MAXAGE = 120
 
 
-def read_generation_table(xlswb, sheetname, calc_year):
+def read_generation_table(xlswb, sheet_name, calc_year):
     """ Return generations tables (M, F), starting from calculation year
     """
     tables = {}
-    data = pd.read_excel(xlswb, skiprows=0, sheetname=sheetname)
+    data = pd.read_excel(xlswb, skiprows=0, sheet_name=sheet_name)
     for gender in [settings.MALE, settings.FEMALE]:
         tab = data[data['gender'] == gender]
         tab = tab.iloc[:, 1:]
@@ -77,11 +81,11 @@ def get_lx(lx_tables, current_age):
 
 if __name__ == "__main__":
     # user input
-    xlswb = settings.XLSWB
-    sheetname = "AG2014"
+    sheet_name = "AG2014"
+    xlswb = os.path.join(DATADIR, "{sheet_name}.xlsx".format(sheet_name=sheet_name))
     calc_year = 2017
 
-    data = read_generation_table(xlswb, sheetname, calc_year)
+    data = read_generation_table(xlswb, sheet_name, calc_year)
     lx = flatten_generation_table(data)
 
     # print(lx['M'].ix[67])
