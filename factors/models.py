@@ -613,7 +613,7 @@ class LifeTable(object):
         sheets['yield_curve'] = pd.DataFrame(self.yield_curve, columns=['intrest'])
         sheets['lx'] = pd.concat([self.lx_table[MALE], self.lx_table[FEMALE]], axis=1)
         sheets['hx'] = pd.concat([self.hx[MALE], self.hx[FEMALE]], axis=1)
-        sheets['adjustments'] = pd.read_excel(self.excel_filepath, sheetname='tbl_adjustments')
+        sheets['adjustments'] = pd.read_excel(self.excel_filepath, sheet_name='tbl_adjustments')
 
         # write everything to Excel
         writer = pd.ExcelWriter(xlswb)
