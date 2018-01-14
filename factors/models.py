@@ -1,27 +1,30 @@
 from __future__ import print_function
+
 from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
 import xlrd
 
-from factors.settings import UPAGE, LOWAGE, MAXAGE, XLSWB, INSURANCE_IDS, MALE, FEMALE
-from factors.utils import dictify, prae_to_continuous, merge_two_dicts, cartesian, expand, x_to_series
+from factors.settings import DATADIR, UPAGE, LOWAGE, MAXAGE, INSURANCE_IDS, MALE, FEMALE
+from factors.utils import (dictify, get_excel_filepath, prae_to_continuous, merge_two_dicts, cartesian, expand,
+                           x_to_series)
 from factors.utils_extra import read_generation_table, flatten_generation_table
 
-
-REQUIRED_SHEETS = ['tbl_insurance_types',
-                   'tbl_tariff',
-                   'tbl_lx',
-                   'tbl_hx',
-                   'tbl_adjustments']  # optional: tbl_ukv and tbl_testdata
+REQUIRED_SHEETS = [
+    'tbl_insurance_types',
+    'tbl_tariff',
+    'tbl_lx',
+    'tbl_hx',
+    'tbl_adjustments'
+]  # optional: tbl_ukv and tbl_testdata
 
 
 class LifeTable(object):
     def __init__(self, tablename, **kwargs):
         self.warning = self.prn_warning()
         self.tablename = tablename
-        self.xlswb = kwargs.get('xlswb', XLSWB)
+        self.excel_filepath = get_excel_filepath(tablename=tablename)
         self.calc_year = kwargs.get('calc_year', 2017)
         self.legend = self.get_legend()
         self.params = self.get_parameters()
@@ -41,7 +44,7 @@ class LifeTable(object):
         self.yield_curve = None
 
     def get_sheetnames(self):
-        wb = xlrd.open_workbook(self.xlswb, on_demand=True)
+        wb = xlrd.open_workbook(self.excel_filepath, on_demand=True)
         return wb.sheet_names()
 
     def xls_contains_all_required_sheets(self):
@@ -51,12 +54,12 @@ class LifeTable(object):
         print("*** WARNING: feature branch version!")
 
     def get_legend(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_insurance_types')
+        df = pd.read_excel(self.excel_filepath, sheetname='tbl_insurance_types')
         df.set_index('id_type', inplace=True)
         return df
 
     def get_parameters(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_tariff')
+        df = pd.read_excel(self.excel_filepath, sheetname='tbl_tariff')
         # to_dict("records") converts it to a list of dictionaries,
         # we just want the first item
         parameters = df.to_dict("records")
@@ -68,12 +71,12 @@ class LifeTable(object):
         if self.params['is_flat']:
             return None
         else:
-            return read_generation_table(self.xlswb, self.params['lx'],
+            return read_generation_table(self.excel_filepath, self.params['lx'],
                                          self.calc_year)
 
     def get_lx_table(self):
         if self.params['is_flat']:
-            df = pd.read_excel(self.xlswb, sheetname='tbl_lx')
+            df = pd.read_excel(self.excel_filepath, sheetname='tbl_lx')
             df.set_index(['gender', 'age'], inplace=True)
             out = {gender: df.ix[gender] for gender in (MALE, FEMALE)}
         else:
@@ -90,21 +93,21 @@ class LifeTable(object):
         return out
 
     def get_hx(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_hx')
+        df = pd.read_excel(self.excel_filepath, sheetname='tbl_hx')
         df.set_index(['gender', 'age'], inplace=True)
         return {gender: df.ix[gender] for gender in (MALE, FEMALE)}
 
     def get_adjustments(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_adjustments')
+        df = pd.read_excel(self.excel_filepath, sheetname='tbl_adjustments')
         return dictify(df)
 
     def get_ukv(self):
-        df = pd.read_excel(self.xlswb, sheetname='tbl_ukv')
+        df = pd.read_excel(self.excel_filepath, sheetname='tbl_ukv')
         df.set_index(['gender', 'pension_age', 'intrest'], inplace=True)
         return df
 
     def get_testdata(self):
-        return pd.read_excel(self.xlswb, sheetname='tbl_testdata')
+        return pd.read_excel(self.excel_filepath, sheetname='tbl_testdata')
 
     def npx(self, age, sex, nyears):
         """Returns probability person with given age is still alive after n years.
@@ -179,10 +182,10 @@ class LifeTable(object):
         current_age_beneficiary = age_insured - sign * delta + gamma3
         lx = self.lx(current_age_beneficiary)
         tbl_beneficiary = (lx[FEMALE]['lx'] if sex_insured == MALE
-                           else lx[MALE]['lx'])
+        else lx[MALE]['lx'])
         cf_ay_avg = (self.cf_annuity(current_age_beneficiary,
-                     tbl_beneficiary) + self.cf_annuity(
-                     current_age_beneficiary + 1, tbl_beneficiary)) / 2.
+                                     tbl_beneficiary) + self.cf_annuity(
+            current_age_beneficiary + 1, tbl_beneficiary)) / 2.
         cf_ay_avg = prae_to_continuous(cf_ay_avg)
         return {'payments': cf_ay_avg}
 
@@ -200,7 +203,7 @@ class LifeTable(object):
         """
         cf_ay_avg = self.cf_ay_avg(age_insured, sex_insured, insurance_type)
         return self.pv({'insurance_id': 'OPLL',
-                       'payments': cf_ay_avg['payments']}, intrest)
+                        'payments': cf_ay_avg['payments']}, intrest)
 
     def create_lookup_table(self, intrest):
         """ Returns a lookup table with age/sex dependent items for undefined partner.
@@ -210,17 +213,17 @@ class LifeTable(object):
         intrest: int, float of Series.
         """
         s = pd.DataFrame({'gender': (UPAGE - LOWAGE) * [MALE] +
-                         (UPAGE - LOWAGE) * [FEMALE],
-                         'age': np.concatenate([np.arange(LOWAGE, UPAGE), np.arange(LOWAGE, UPAGE)])
+                                    (UPAGE - LOWAGE) * [FEMALE],
+                          'age': np.concatenate([np.arange(LOWAGE, UPAGE), np.arange(LOWAGE, UPAGE)])
                           })
         s['ay_avg'] = s.apply(lambda row: self.ay_avg(row['age'],
-                              row['gender'], intrest), axis=1)
+                                                      row['gender'], intrest), axis=1)
         s['hx_avg'] = s.apply(lambda row: (self.hx[row['gender']].ix[row['age']].values[0] +
                                            self.hx[row['gender']].ix[row['age'] + 1].values[0]) / 2., axis=1)
         s['alpha1'] = s.apply(lambda row: self.adjust[row['gender']]['partner']['CX1'], axis=1)
         s['factor'] = s.apply(lambda row: self.adjust[row['gender']]['partner']['fnett'] *
-                              self.adjust[row['gender']]['partner']['fcorr'] *
-                              self.adjust[row['gender']]['partner']['fOTS'],
+                                          self.adjust[row['gender']]['partner']['fcorr'] *
+                                          self.adjust[row['gender']]['partner']['fOTS'],
                               axis=1)
         s['cf'] = s['ay_avg'] * s['hx_avg'] * s['factor']
         s.set_index(['gender', 'age'], inplace=True)
@@ -239,7 +242,7 @@ class LifeTable(object):
         postnumerando: boolean
         """
         postnumerando = (kwargs['postnumerando'] if
-                         'postnumerando' in kwargs else False)
+        'postnumerando' in kwargs else False)
 
         alpha1 = self.adjust[sex_insured]['retire']['CX1']
         alpha2 = self.adjust[sex_insured]['retire']['CX2']
@@ -304,9 +307,9 @@ class LifeTable(object):
         f2 = f2 * self.cf_annuity(current_age_beneficiary,
                                   tbl_beneficiary, pension_age - age_insured)
         temp1 = ((float(tbl_insured_alpha1.ix[pension_age + alpha1]) /
-                 tbl_insured_alpha1.ix[current_age_alpha1]))
+                  tbl_insured_alpha1.ix[current_age_alpha1]))
         temp2 = ((float(tbl_insured_alpha2.ix[current_age_alpha2]) /
-                 tbl_insured_alpha2.ix[pension_age + alpha2]))
+                  tbl_insured_alpha2.ix[pension_age + alpha2]))
         f2 = f2 * temp1 * temp2
         out = fnett * fcorr * fOTS * (ay - axy + (f1 - f2))
         # print(ay, axy, f1, f2)
@@ -365,7 +368,7 @@ class LifeTable(object):
             self.intrest = intrest
 
         cf_till_pension_age = (lookup.ix[sex_insured].
-                               ix[age_insured:pension_age - 1])
+                                   ix[age_insured:pension_age - 1])
         current_age = age_insured  # we need [k]q[current_age]
         cf_till_pension_age['age'] = cf_till_pension_age.index
         nq_current_age = cf_till_pension_age.apply(lambda row:
@@ -377,7 +380,8 @@ class LifeTable(object):
         cf_till_pension_age = pd.DataFrame(cf_till_pension_age, columns=['cf'])
 
         # cf after retirement
-        prob = self.npx(age_insured + lookup['alpha1'].loc[(sex_insured, age_insured)], sex_insured, pension_age - age_insured)
+        prob = self.npx(age_insured + lookup['alpha1'].loc[(sex_insured, age_insured)], sex_insured,
+                        pension_age - age_insured)
         cf_defined_partner = self.cf_defined_partner(pension_age, sex_insured, pension_age)
         cf_after_pension_age = hx_at_pensionage * prob * cf_defined_partner['payments']
         cf_after_pension_age = pd.DataFrame(cf_after_pension_age, columns=['cf'])
@@ -425,7 +429,8 @@ class LifeTable(object):
         pension_age: int
         """
 
-        hx_avg = (self.hx[sex_insured].ix[age_insured].values[0] + self.hx[sex_insured].ix[age_insured + 1].values[0]) / 2.
+        hx_avg = (self.hx[sex_insured].ix[age_insured].values[0] + self.hx[sex_insured].ix[age_insured + 1].values[
+            0]) / 2.
         cf_defined_one_year_risk = self.cf_defined_one_year_risk(age_insured, sex_insured, pension_age, **kwargs)
         cf = hx_avg * cf_defined_one_year_risk['payments']
         return {'insurance_id': 'NPTL-O', 'payments': cf}
@@ -475,13 +480,13 @@ class LifeTable(object):
         self.yield_curve = x_to_series(intrest, len(cfs))
 
         if insurance_id in ['OPLL', 'NPLL-B', 'ay_avg']:
-            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.)) ** year
         elif insurance_id in ['NPTL-B', 'NPTL-O']:
-            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**(year + 0.5)
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.)) ** (year + 0.5)
         elif insurance_id in ['NPLL-O', 'NPLLRS', 'NPLLRU']:
             nyears_till_pension_age = cf['pension_age'] - cf['age']
             year = year + 0.5 * (year <= nyears_till_pension_age)
-            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.))**year
+            pv_factors = self.yield_curve.map(lambda r: 1. / (1 + r / 100.)) ** year
         else:
             print("---ERROR: cannot process insurance_id: {0}".format(insurance_id))
 
@@ -557,6 +562,7 @@ class LifeTable(object):
                            sex_insured=row['sex_insured'],
                            pension_age=pension_age,
                            intrest=intrest)
+
         df['cf'] = df.apply(map_to_cf, axis=1)
         self.intrest = intrest
         self.pension_age = pension_age

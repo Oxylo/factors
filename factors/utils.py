@@ -1,6 +1,21 @@
+import glob
 import itertools
+import os
+
 import numpy as np
 import pandas as pd
+
+from factors.settings import DATADIR
+
+
+def get_excel_filepath(tablename):
+    # Check if we have a Excel sheet with the name tablename
+    excel_filepaths = glob.glob(os.path.join(DATADIR, "{tablename}.*".format(tablename=tablename)))
+    if len(excel_filepaths) != 1:
+        raise ValueError("Couldn't find the right table")
+
+    excel_filepath = excel_filepaths[0]
+    return excel_filepath
 
 
 def merge_two_dicts(x, y):

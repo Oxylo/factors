@@ -1,19 +1,13 @@
-import os
-from factors import LifeTable
-
-
-def test_data():
-    xlswb = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "AEG2011.xlsx")
-    tables = LifeTable("AEG2011", xlswb=xlswb)
+def test_data(aegon_table):
+    tables = aegon_table
     testdata = tables.run_test()
     assert testdata is not None
     error_squared = sum(testdata['difference'] * testdata['difference'])
     assert error_squared < 3.5e-5
 
 
-def test_single_person():
-    xlswb = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "AEG2011.xlsx")
-    tables = LifeTable("AEG2011", xlswb=xlswb)
+def test_single_person(aegon_table):
+    tables = aegon_table
     test_value = 5.0849
     params = dict(
         sex_insured="M",
