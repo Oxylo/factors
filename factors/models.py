@@ -25,6 +25,7 @@ class LifeTable(object):
         self.warning = self.prn_warning()
         self.tablename = tablename
         self.excel_filepath = get_excel_filepath(tablename=tablename)
+        print(self.excel_filepath)
         self.calc_year = kwargs.get('calc_year', 2017)
         self.legend = self.get_legend()
         self.params = self.get_parameters()
@@ -54,12 +55,16 @@ class LifeTable(object):
         print("*** WARNING: feature branch version!")
 
     def get_legend(self):
-        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_insurance_types')
+        sheet = 'tbl_insurance_types'
+        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
+                           sheet_name=sheet)
         df.set_index('id_type', inplace=True)
         return df
 
     def get_parameters(self):
-        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_tariff')
+        sheet = 'tbl_tariff'
+        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
+                           sheet_name=sheet)  # sheet(_)name: Python 2 vs 3.
         # to_dict("records") converts it to a list of dictionaries,
         # we just want the first item
         parameters = df.to_dict("records")
@@ -76,7 +81,9 @@ class LifeTable(object):
 
     def get_lx_table(self):
         if self.params['is_flat']:
-            df = pd.read_excel(self.excel_filepath, sheet_name='tbl_lx')
+            sheet = 'tbl_lx'
+            df = pd.read_excel(self.excel_filepath, sheetname=sheet,
+                               sheet_name=sheet)
             df.set_index(['gender', 'age'], inplace=True)
             out = {gender: df.ix[gender] for gender in (MALE, FEMALE)}
         else:
@@ -93,21 +100,29 @@ class LifeTable(object):
         return out
 
     def get_hx(self):
-        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_hx')
+        sheet = 'tbl_hx'
+        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
+                           sheet_name=sheet)
         df.set_index(['gender', 'age'], inplace=True)
         return {gender: df.ix[gender] for gender in (MALE, FEMALE)}
 
     def get_adjustments(self):
-        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_adjustments')
+        sheet = 'tbl_adjustments'
+        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
+                           sheet_name=sheet)
         return dictify(df)
 
     def get_ukv(self):
-        df = pd.read_excel(self.excel_filepath, sheet_name='tbl_ukv')
+        sheet = 'tbl_ukv'
+        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
+                           sheet_name=sheet)
         df.set_index(['gender', 'pension_age', 'intrest'], inplace=True)
         return df
 
     def get_testdata(self):
-        return pd.read_excel(self.excel_filepath, sheet_name='tbl_testdata')
+        sheet = 'tbl_testdata'
+        return pd.read_excel(self.excel_filepath, sheetname=sheet,
+                             sheet_name=sheet)
 
     def npx(self, age, sex, nyears):
         """Returns probability person with given age is still alive after n years.
@@ -501,6 +516,9 @@ class LifeTable(object):
         ----------
         d: dict.
         """
+        if self.testdata is None:
+            print("No testdata available for table {}".format(self.tablename))
+            return None
         msg1, msg2, msg3 = ("Generating cash flows...please wait...",
                             "Calculating present value of cash flows...",
                             "Sum of Errors Squared = ")
