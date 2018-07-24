@@ -34,3 +34,6 @@ dist
 # Jupyter
 *.ipynb
 .ipynb_checkpoints
+
+# other
+TODO.rst
