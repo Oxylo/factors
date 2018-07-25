@@ -56,8 +56,7 @@ class LifeTable(object):
 
     def get_legend(self):
         sheet = 'tbl_insurance_types'
-        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
-                           sheet_name=sheet)
+        df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
         df.set_index('id_type', inplace=True)
         return df
 
