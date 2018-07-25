@@ -56,14 +56,15 @@ class LifeTable(object):
 
     def get_legend(self):
         sheet = 'tbl_insurance_types'
+        # TODO : Python 2 verwacht sheetname=sheet
         df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
         df.set_index('id_type', inplace=True)
         return df
 
     def get_parameters(self):
         sheet = 'tbl_tariff'
-        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
-                           sheet_name=sheet)  # sheet(_)name: Python 2 vs 3.
+        # TODO : Python 2 verwacht sheetname=sheet
+        df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
         # to_dict("records") converts it to a list of dictionaries,
         # we just want the first item
         parameters = df.to_dict("records")
@@ -81,8 +82,8 @@ class LifeTable(object):
     def get_lx_table(self):
         if self.params['is_flat']:
             sheet = 'tbl_lx'
-            df = pd.read_excel(self.excel_filepath, sheetname=sheet,
-                               sheet_name=sheet)
+            # TODO : Python 2 verwacht sheetname=sheet
+            df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
             df.set_index(['gender', 'age'], inplace=True)
             out = {gender: df.ix[gender] for gender in (MALE, FEMALE)}
         else:
@@ -100,28 +101,28 @@ class LifeTable(object):
 
     def get_hx(self):
         sheet = 'tbl_hx'
-        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
-                           sheet_name=sheet)
+        # TODO : Python 2 verwacht sheetname=sheet
+        df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
         df.set_index(['gender', 'age'], inplace=True)
         return {gender: df.ix[gender] for gender in (MALE, FEMALE)}
 
     def get_adjustments(self):
         sheet = 'tbl_adjustments'
-        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
-                           sheet_name=sheet)
+        # TODO : Python 2 verwacht sheetname=sheet
+        df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
         return dictify(df)
 
     def get_ukv(self):
         sheet = 'tbl_ukv'
-        df = pd.read_excel(self.excel_filepath, sheetname=sheet,
-                           sheet_name=sheet)
+        # TODO : Python 2 verwacht sheetname=sheet
+        df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
         df.set_index(['gender', 'pension_age', 'intrest'], inplace=True)
         return df
 
     def get_testdata(self):
         sheet = 'tbl_testdata'
-        return pd.read_excel(self.excel_filepath, sheetname=sheet,
-                             sheet_name=sheet)
+        # TODO : Python 2 verwacht sheetname=sheet
+        return pd.read_excel(self.excel_filepath, sheet_name=sheet)
 
     def npx(self, age, sex, nyears):
         """Returns probability person with given age is still alive after n years.
@@ -630,6 +631,7 @@ class LifeTable(object):
         sheets['yield_curve'] = pd.DataFrame(self.yield_curve, columns=['intrest'])
         sheets['lx'] = pd.concat([self.lx_table[MALE], self.lx_table[FEMALE]], axis=1)
         sheets['hx'] = pd.concat([self.hx[MALE], self.hx[FEMALE]], axis=1)
+        # TODO : Python 2 verwacht sheetname=sheet
         sheets['adjustments'] = pd.read_excel(self.excel_filepath, sheet_name='tbl_adjustments')
 
         # write everything to Excel
