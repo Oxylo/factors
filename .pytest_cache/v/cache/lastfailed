@@ -1,0 +1,7 @@
+{
+  "factors/tests/test_new_factors.py::test_cf_annuity[AEG2011-42-F-20-0.863696859]": true,
+  "factors/tests/test_new_factors.py::test_cf_annuity_on_aeg2011": true,
+  "factors/tests/test_new_factors.py::test_get_adjusted_lxtable": true,
+  "factors/tests/test_new_factors.py::test_get_lx": true,
+  "factors/tests/test_new_factors.py::test_lx": true
+}

@@ -1,0 +1,6 @@
+[
+  "factors/tests/test_new_factors.py::test_cf_annuity[AEG2011-27-M-3-0.999690687]",
+  "factors/tests/test_new_factors.py::test_cf_annuity[AEG2011-35-M-18-0.990939192]",
+  "factors/tests/test_new_factors.py::test_cf_annuity[AEG2011-24-F-7-0.999479725]",
+  "factors/tests/test_new_factors.py::test_cf_annuity[AEG2011-42-F-20-0.863696859]"
+]

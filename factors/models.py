@@ -7,9 +7,11 @@ import pandas as pd
 import xlrd
 
 from factors.settings import UPAGE, LOWAGE, MAXAGE, INSURANCE_IDS, MALE, FEMALE
-from factors.utils import (dictify, get_excel_filepath, prae_to_continuous, merge_two_dicts, cartesian, expand,
-                           x_to_series)
-from factors.utils_extra import read_generation_table, flatten_generation_table
+from factors.utils import (dictify, get_excel_filepath,
+                           prae_to_continuous, merge_two_dicts,
+                           cartesian, expand, x_to_series)
+from factors.utils_extra import (read_generation_table,
+                                 flatten_generation_table)
 
 REQUIRED_SHEETS = [
     'tbl_insurance_types',
@@ -22,10 +24,11 @@ REQUIRED_SHEETS = [
 
 class LifeTable(object):
     def __init__(self, tablename, **kwargs):
-        self.warning = self.prn_warning()
         self.tablename = tablename
         self.excel_filepath = get_excel_filepath(tablename=tablename)
-        print(self.excel_filepath)
+        msg = "Reading table parmeters from {}"
+        print(msg.format(self.excel_filepath))
+        # TODO: make calc_year required if type(tablename) = generation
         self.calc_year = kwargs.get('calc_year', 2017)
         self.legend = self.get_legend()
         self.params = self.get_parameters()
@@ -51,9 +54,6 @@ class LifeTable(object):
     def xls_contains_all_required_sheets(self):
         return all(x in self.sheet_names for x in REQUIRED_SHEETS)
 
-    def prn_warning(self):
-        print("*** WARNING: feature branch version!")
-
     def get_legend(self):
         sheet = 'tbl_insurance_types'
         # TODO : Python 2 verwacht sheetname=sheet
@@ -76,7 +76,8 @@ class LifeTable(object):
         if self.params['is_flat']:
             return None
         else:
-            return read_generation_table(self.excel_filepath, self.params['lx'],
+            return read_generation_table(self.excel_filepath,
+                                         self.params['lx'],
                                          self.calc_year)
 
     def get_lx_table(self):
@@ -160,6 +161,7 @@ class LifeTable(object):
         nyears: int
         """
         return self.npx(age, sex, nyears - 1) - self.npx(age, sex, nyears)
+
 
     def cf_annuity(self, age, lx, defer=0):
         """ Returns expected payments for (deferred) lifetime annuity.
