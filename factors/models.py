@@ -207,7 +207,7 @@ class LifeTable(object):
         return {'payments': cf_ay_avg}
 
     def ay_avg(self, age_insured, sex_insured,
-               intrest, insurance_type='partner'):
+               intrest, insurance_type='partner', rounding=False):
         """ Returns single premium non-defered annuity for beneficiary.
 
         Parameters:
@@ -215,12 +215,13 @@ class LifeTable(object):
         age_insured: int
         sex_insured: either 'M' of 'F'
         intrest: int, float or Series
+        (example: for calculating with 3.2 percent intrest rate, intrest=3.2)
 
         insurance_type: either 'partner' or 'risk'. Default 'partner'.
         """
         cf_ay_avg = self.cf_ay_avg(age_insured, sex_insured, insurance_type)
         return self.pv({'insurance_id': 'OPLL',
-                        'payments': cf_ay_avg['payments']}, intrest)
+                        'payments': cf_ay_avg['payments']}, intrest, rounding)
 
     def create_lookup_table(self, intrest):
         """ Returns a lookup table with age/sex dependent items for undefined partner.
@@ -234,7 +235,9 @@ class LifeTable(object):
                           'age': np.concatenate([np.arange(LOWAGE, UPAGE), np.arange(LOWAGE, UPAGE)])
                           })
         s['ay_avg'] = s.apply(lambda row: self.ay_avg(row['age'],
-                                                      row['gender'], intrest), axis=1)
+                                                      row['gender'],
+                                                      intrest,
+                                                      rounding=False), axis=1)
         s['hx_avg'] = s.apply(lambda row: (self.hx[row['gender']].ix[row['age']].values[0] +
                                            self.hx[row['gender']].ix[row['age'] + 1].values[0]) / 2., axis=1)
         s['alpha1'] = s.apply(lambda row: self.adjust[row['gender']]['partner']['CX1'], axis=1)
@@ -483,7 +486,7 @@ class LifeTable(object):
                                                              **kwargs))
         return out
 
-    def pv(self, cf, intrest):
+    def pv(self, cf, intrest, rounding=False):
         """ Returns present value of cash flows.
 
         Parameters:
@@ -508,11 +511,14 @@ class LifeTable(object):
             print("---ERROR: cannot process insurance_id: {0}".format(insurance_id))
 
         present_value = sum(cfs * pv_factors)
-        rounding = self.params['round']
-        return round(present_value, rounding)
+        if rounding:
+            rounding = self.params['round']
+            return round(present_value, rounding)
+        else:
+            return present_value
 
     def run_test(self):
-        """ Performs tariff calulations om testdata.
+        """ Performs tariff calulations on testdata.
 
         Parameters:
         ----------

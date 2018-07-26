@@ -1,7 +1,15 @@
 {
+  "factors/tests/test_new_factors.py::test_ay_avg[AEG2011-60-M-3.0-19.564127]": true,
+  "factors/tests/test_new_factors.py::test_ay_avg[AEG2011-62-M-3.0-18.820879]": true,
+  "factors/tests/test_new_factors.py::test_ay_avg[AEG2011-66-M-3.0-17.243327]": true,
   "factors/tests/test_new_factors.py::test_cf_annuity[AEG2011-42-F-20-0.863696859]": true,
   "factors/tests/test_new_factors.py::test_cf_annuity_on_aeg2011": true,
+  "factors/tests/test_new_factors.py::test_create_lookup_table[AEG2011-3.0-M-60-15.9431797]": true,
+  "factors/tests/test_new_factors.py::test_create_lookup_table[AEG2011-3.0-M-60-16.6882039]": true,
+  "factors/tests/test_new_factors.py::test_create_lookup_table[AEG2011-3.0-M-60-17.4017847]": true,
   "factors/tests/test_new_factors.py::test_get_adjusted_lxtable": true,
   "factors/tests/test_new_factors.py::test_get_lx": true,
-  "factors/tests/test_new_factors.py::test_lx": true
+  "factors/tests/test_new_factors.py::test_lx": true,
+  "factors/tests/test_new_factors.py::test_npx[AEG2011-50-F-30-0.92993142]": true,
+  "factors/tests/test_new_factors.py::test_qx[AEG2011-25-M-8.0794e-05]": true
 }
