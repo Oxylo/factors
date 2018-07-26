@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 from factors.models import LifeTable
 from factors.settings import MALE, FEMALE
@@ -10,7 +11,7 @@ def my_lifetable(tablename):
     return LifeTable(tablename)
 
 
-# ------ test npx ------
+# ------ test npx ----------------------------------------------------
 params = "tablename, age, sex, nyears, test_value"
 
 
@@ -26,7 +27,7 @@ def test_npx(tablename, age, sex, nyears, test_value):
     assert (calculated == pytest.approx(test_value))
 
 
-# ------ test qx ------
+# ------ test qx -----------------------------------------------------
 params = "tablename, age, sex, test_value"
 
 
@@ -42,7 +43,7 @@ def test_qx(tablename, age, sex, test_value):
     assert (calculated == pytest.approx(test_value))
 
 
-# ------ test nqx ------
+# ------ test nqx -----------------------------------------------------
 params = "tablename, age, sex, nyears, test_value"
 
 
@@ -58,7 +59,7 @@ def test_nqx(tablename, age, sex, nyears, test_value):
     assert (calculated == pytest.approx(test_value))
 
 
-# ------ test cf_annuity ------
+# ------ test cf_annuity ----------------------------------------------
 params = "tablename, age_insured, sex_insured, year_cf, test_value"
 
 
@@ -78,7 +79,7 @@ def test_cf_annuity(tablename, age_insured, sex_insured,
     assert (calculated[year_cf] == pytest.approx(test_value))
 
 
-# ------ cf_ay_avg -----
+# ------ cf_ay_avg ----------------------------------------------------
 params = "tablename, age_insured, sex_insured, year_cf, test_value"
 
 
@@ -95,7 +96,7 @@ def test_cf_ay_avg(tablename, age_insured, sex_insured,
     assert (calculated['payments'][year_cf] == pytest.approx(test_value))
 
 
-# ------ ay_avg -----
+# ------ test ay_avg --------------------------------------------------
 params = "tablename, age_insured, sex_insured, intrest, rounding, test_value"
 
 
@@ -113,7 +114,7 @@ def test_ay_avg(tablename, age_insured, sex_insured,
     assert (calculated == pytest.approx(test_value))
 
 
-# ------ test create_lookup_table -----
+# ------ test create_lookup_table -------------------------------------
 params = "tablename, intrest, sex_insured, age_insured, test_value"
 
 
@@ -131,7 +132,7 @@ def test_create_lookup_table(tablename, intrest, sex_insured,
             pytest.approx(test_value))
 
 
-# ------ test cf_retirement_pension -----
+# ------ test cf_retirement_pension -----------------------------------
 params = ("tablename, age_insured, sex_insured, "
           "pension_age, year_cf, test_value")
 
@@ -150,4 +151,104 @@ def test_cf_retirement_pension(tablename, age_insured, sex_insured,
     assert (calculated['payments'][year_cf] ==
             pytest.approx(test_value))
 
+
+# ------ test cf_defined_partner -----------------------------------
+params = ("tablename, age_insured, sex_insured, "
+          "pension_age, year_cf, test_value")
+
+
+@pytest.mark.parametrize(params, [
+    ("AEG2011", 15, MALE, 67, 25, 0.00438843),
+    ("AEG2011", 15, MALE, 67, 26, 0.00485197),
+    ("AEG2011", 15, MALE, 67, 51, 0.06571732),
+    ("AEG2011", 15, MALE, 67, 52, 0.07226776),
+    ("AEG2011", 15, MALE, 67, 75, 0.37404980),
+    ("AEG2011", 15, MALE, 67, 76, 0.37938236),
+    ])
+def test_cf_defined_partner(tablename, age_insured, sex_insured,
+                            pension_age, year_cf, test_value):
+    tab = my_lifetable(tablename)
+    calculated = tab.cf_defined_partner(age_insured, sex_insured,
+                                        pension_age)
+    assert (calculated['payments'][year_cf] ==
+            pytest.approx(test_value))
+
+
+# ------ test cf_undefined_partner ------TODO: komt deze test nog niet door!**
+
+params = ("tablename, age_insured, sex_insured, "
+          "pension_age, intrest, hx_pd, year_cf, test_value")
+
+
+@pytest.mark.parametrize(params, [
+    ("AEG2011", 60, MALE, 67, 3.0, 'one', 20, 0.162132918),
+    ("AEG2011", 60, MALE, 67, 3.0, 'one', 40, 0.133635078),
+    ("AEG2011", 60, MALE, 67, 3.0, 'one', 51, 0.000440754),
+    ("AEG2011", 60, MALE, 67, 3.0, 'ukv', 20, 0.157276446),
+    ("AEG2011", 60, MALE, 67, 3.0, 'ukv', 40, 0.128830446),
+    ("AEG2011", 60, MALE, 67, 3.0, 'ukv', 51, 0.000424816),
+    ])
+def test_cf_undefined_partner(tablename, age_insured, sex_insured,
+                              pension_age, intrest, hx_pd,
+                              year_cf, test_value):
+    tab = my_lifetable(tablename)
+    calculated = tab.cf_undefined_partner(age_insured, sex_insured,
+                                          pension_age, intrest=intrest,
+                                          hx_pd=hx_pd)
+    assert (calculated['payments'][year_cf] ==
+            pytest.approx(test_value))
+
+# ------ test cf_defined_one_year_risk ------------------*** TODO *** -
+
+# ------ test cf_undefined_one_year_risk ----------------*** TODO ***
+
+
+# ------ test cf --------------------------------------*** TODO: 2/4 **
+
+params = ("tablename, insurance_id, age_insured, sex_insured, "
+          "pension_age, intrest, year_cf, test_value")
+
+
+@pytest.mark.parametrize(params, [
+    ("AEG2011", 'OPLL', 15, MALE, 67, None, 52, 0.476719925),
+    ("AEG2011", 'NPLL-B', 15, MALE, 67, None, 51, 0.06571732),
+    ("AEG2011", 'NPLLRS', 60, MALE, 67, 3.0, 40, 0.133635078),
+    ("AEG2011", 'NPLLRU', 60, MALE, 67, 3.0, 40, 0.128830446),
+    ])
+def test_cf2(tablename, insurance_id, age_insured, sex_insured,
+             pension_age, intrest, year_cf, test_value):
+    tab = my_lifetable(tablename)
+    calculated = tab.cf(insurance_id, age_insured, sex_insured,
+                        pension_age, intrest=intrest)
+    assert (calculated['payments'][year_cf] ==
+            pytest.approx(test_value))
+
+# ------ test pv -----------------------------------------------------
+
+
+params = "tablename, cfs, intrest, rounding, test_value"
+
+
+@pytest.mark.parametrize(params, [
+    ("AEG2011", {'insurance_id': 'OPLL',
+                 'payments': pd.Series([100, -10, 500, -200]),
+                 'age': None,
+                 'pension_age': None}, 3, False, 378.5608848322),
+    ("AEG2011", {'insurance_id': 'OPLL',
+                 'payments': pd.Series([100, -10, 500, -200]),
+                 'age': None,
+                 'pension_age': None}, 5, False, 371.2234099989),
+    ("AEG2011", {'insurance_id': 'OPLL',
+                 'payments': pd.Series([100, -10, 500, -200]),
+                 'age': None,
+                 'pension_age': None}, 3, True, 378.5609),
+    ("AEG2011", {'insurance_id': 'OPLL',
+                 'payments': pd.Series([100, -10, 500, -200]),
+                 'age': None,
+                 'pension_age': None}, 5, True, 371.2234),
+    ])
+def test_pv(tablename, cfs, intrest, rounding, test_value):
+    tab = my_lifetable(tablename)
+    calculated = tab.pv(cfs, intrest, rounding=rounding)
+    assert (calculated == pytest.approx(test_value))
 
