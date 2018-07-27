@@ -1,3 +1,5 @@
+[![pypi-version]][pypi]
+
 # factors
 
 Generates actuarial factors for premium calculations
@@ -27,3 +29,5 @@ These dependencies are automatically installed:
 See CHANGELOG.md for the latest changes.
 
 [changelog]: CHANGELOG.md
+[pypi-version]: https://img.shields.io/pypi/v/factors.svg
+[pypi]: https://pypi.python.org/pypi/factors

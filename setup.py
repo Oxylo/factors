@@ -18,20 +18,11 @@ setup(
     name='factors',
     version=get_version_from_src(),
     packages=find_packages(),
-    # package_data={
-    #     "factors.data": ["*.xls", "*.xlsx"]
-    # },
     include_package_data=True,
-    entry_points={
-        'console_scripts': [
-            'factors=factors.__main__:main'
-        ]
-    },
+    
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
@@ -43,7 +34,7 @@ setup(
     maintainer_email='pmarres@oxylo.com',
     license='MIT',
     url='https://github.com/Oxylo/factors',
-    download_url='https://github.com/Oxylo/factors/archive/0.1.tar.gz',
+    download_url='https://github.com/Oxylo/factors/archive/{version}.tar.gz'.format(version=get_version_from_src()),
     zip_safe=False,
     install_requires=[
         'pandas>=0.23.3',
