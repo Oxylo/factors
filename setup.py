@@ -28,6 +28,7 @@ setup(
     ],
     description='Generates actuarial factors for premium calculations.',
     long_description=readme(),
+    long_description_content_type='text/markdown',
     author='Pieter Marres',
     author_email='pmarres@oxylo.com',
     maintainer='Pieter Marres',

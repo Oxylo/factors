@@ -7,4 +7,4 @@ __all__ = [
     'LifeTable', __version__
 ]
 
-tables = get_available_tablenames
+tables = get_available_tablenames()
