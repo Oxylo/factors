@@ -15,8 +15,8 @@ def read_generation_table(xlswb, sheet_name, calc_year):
     """ Return generations tables (M, F), starting from calculation year
     """
     tables = {}
-    data = pd.read_excel(xlswb, skiprows=0, sheetname=sheet_name,
-                         sheet_name=sheet_name)  # sheet(_)name: Python 2 vs 3
+    data = pd.read_excel(xlswb, skiprows=0, sheet_name=sheet_name)
+    # TODO: sheet(_)name: Python 2 vs 3
     for gender in [settings.MALE, settings.FEMALE]:
         tab = data[data['gender'] == gender]
         tab = tab.iloc[:, 1:]

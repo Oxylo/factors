@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 import xlrd
 
-from factors.settings import UPAGE, LOWAGE, MAXAGE, INSURANCE_IDS, MALE, FEMALE
+from factors.settings import (UPAGE, LOWAGE, MAXAGE, INSURANCE_IDS,
+                              MALE, FEMALE, DATADIR)
 from factors.utils import (dictify, get_excel_filepath,
                            prae_to_continuous, merge_two_dicts,
                            cartesian, expand, x_to_series)
@@ -20,6 +21,11 @@ REQUIRED_SHEETS = [
     'tbl_hx',
     'tbl_adjustments'
 ]  # optional: tbl_ukv and tbl_testdata
+
+
+def get_available_tablenames():
+    df = pd.read_csv(DATADIR + "/tables.csv")
+    print(df.to_string(index=False))
 
 
 class LifeTable(object):
