@@ -39,4 +39,5 @@ dist
 TODO.md
 htmlcov
 .pytest_cache/*
+.coverage
 
