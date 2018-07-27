@@ -10,7 +10,7 @@ def get_version_from_src():
 
 
 def readme():
-    with open('README.rst') as f:
+    with open('README.md') as f:
         return f.read()
 
 
@@ -46,10 +46,9 @@ setup(
     download_url='https://github.com/Oxylo/factors/archive/0.1.tar.gz',
     zip_safe=False,
     install_requires=[
-        'numpy',  # TODO pin versions
-        'pandas',
-        'xlrd',
-        'openpyxl',
+        'pandas>=0.23.3',
+        'xlrd>=1.1.0',
+        'openpyxl>=2.5.4',
     ],
     test_suite='pytest',
     tests_require=['pytest'],

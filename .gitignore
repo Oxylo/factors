@@ -36,4 +36,7 @@ dist
 .ipynb_checkpoints
 
 # other
-TODO.rst
+TODO.md
+htmlcov
+.pytest_cache/*
+
