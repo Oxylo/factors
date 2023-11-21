@@ -653,7 +653,7 @@ class LifeTable(object):
         writer = pd.ExcelWriter(xlswb)
         for sheet_name, content in sheets.items():
             content.to_excel(writer, sheet_name)
-        writer.save()
+        writer.close()
 
         msg = "Ready. See {0} for output".format(xlswb)
         print(msg)

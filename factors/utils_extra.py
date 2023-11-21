@@ -98,12 +98,12 @@ if __name__ == "__main__":
         current_age = combi[1]
         df = lx[gender].loc[current_age]
         df.to_excel(writer, gender + str(current_age))
-    writer.save()
+    writer.close()
     """
     for sex in ['M', 'F']:
         df = lx[sex]
         df['qx'] = (df['lx'] - df['lx'].shift(-1).fillna(0)) / df['lx']
         print(df)
         df.to_excel(writer, sex)
-    writer.save()
+    writer.close()
 

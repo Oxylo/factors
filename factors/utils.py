@@ -50,7 +50,7 @@ def to_excel(frame, xlswb='output.xlsx'):
     """
     writer = pd.ExcelWriter(xlswb)
     frame.to_excel(writer, 'Sheet1')
-    writer.save()
+    writer.close()
     return 0
 
 

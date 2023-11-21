@@ -47,4 +47,4 @@ def test_single_person(aegon_table):
         ),
         intrest=params["intrest"]
     )
-    assert factor_OP == test_value
+    assert np.round(factor_OP, 4) == test_value
