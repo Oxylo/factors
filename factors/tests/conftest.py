@@ -7,7 +7,7 @@ import pytest
 from factors import LifeTable
 
 
-@pytest.yield_fixture(autouse=True)
+@pytest.fixture(autouse=True)
 def guaranteed_temp_folder_for_each_test():
     """Make sure that each test runs in a temporary directory."""
     cwd = os.getcwd()  # store the current working directory
