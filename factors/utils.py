@@ -36,7 +36,7 @@ def dictify(frame):
             return frame.values[0][0]
         return frame.values.squeeze()
     grouped = frame.groupby(frame.columns[0])
-    d = {k: dictify(g.ix[:, 1:]) for k, g in grouped}
+    d = {k: dictify(g.iloc[:, 1:]) for k, g in grouped}
     return d
 
 

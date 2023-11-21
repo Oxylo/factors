@@ -77,7 +77,7 @@ def flatten_generation_table(data):
 def get_lx(lx_tables, current_age):
     """ Return lx_table for given current age
     """
-    return {gender: lx_tables[gender].ix[current_age] for gender in [settings.MALE, settings.FEMALE]}
+    return {gender: lx_tables[gender].loc[current_age] for gender in [settings.MALE, settings.FEMALE]}
 
 
 if __name__ == "__main__":
@@ -89,14 +89,14 @@ if __name__ == "__main__":
     data = read_generation_table(xlswb, sheet_name, calc_year)
     lx = flatten_generation_table(data)
 
-    # print(lx['M'].ix[67])
+    # print(lx['M'].loc[67])
     writer = pd.ExcelWriter('output.xlsx')
     # for combi in [('M', 66), ('M', 67), ('F', 63), ('F', 64)]:
     """
     for combi in [('M', 49)]:
         gender = combi[0]
         current_age = combi[1]
-        df = lx[gender].ix[current_age]
+        df = lx[gender].loc[current_age]
         df.to_excel(writer, gender + str(current_age))
     writer.save()
     """

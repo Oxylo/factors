@@ -92,7 +92,7 @@ class LifeTable(object):
             # TODO : Python 2 verwacht sheetname=sheet
             df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
             df.set_index(['gender', 'age'], inplace=True)
-            out = {gender: df.ix[gender] for gender in (MALE, FEMALE)}
+            out = {gender: df.loc[gender] for gender in (MALE, FEMALE)}
         else:
             out = flatten_generation_table(self.generation_table)
         return out
@@ -103,7 +103,7 @@ class LifeTable(object):
         if self.params['is_flat']:
             out = self.lx_table
         else:
-            out = {gender: self.lx_table[gender].ix[current_age] for gender in [MALE, FEMALE]}
+            out = {gender: self.lx_table[gender].loc[current_age] for gender in [MALE, FEMALE]}
         return out
 
     def get_hx(self):
@@ -111,7 +111,7 @@ class LifeTable(object):
         # TODO : Python 2 verwacht sheetname=sheet
         df = pd.read_excel(self.excel_filepath, sheet_name=sheet)
         df.set_index(['gender', 'age'], inplace=True)
-        return {gender: df.ix[gender] for gender in (MALE, FEMALE)}
+        return {gender: df.loc[gender] for gender in (MALE, FEMALE)}
 
     def get_adjustments(self):
         sheet = 'tbl_adjustments'
@@ -143,8 +143,8 @@ class LifeTable(object):
         future_age = np.minimum(age + nyears, MAXAGE)
         current_age = np.minimum(age, MAXAGE)
         lx = self.lx(current_age)
-        return (float(lx[sex].ix[future_age]['lx']) /
-                lx[sex].ix[current_age]['lx'])
+        return (float(lx[sex].loc[future_age]['lx']) /
+                lx[sex].loc[current_age]['lx'])
 
     def qx(self, age, sex):
         """Returns the probability that person with given age will die within 1 year.
@@ -182,7 +182,7 @@ class LifeTable(object):
         assert nrows > defer, "Error: deferral period exceeds number of table rows."
         age = int(age)  # We can't index with floats
         payments = pd.Series(defer * [0] + (nrows - defer) * [1])
-        out = (payments * lx.shift(-age) / lx.ix[age]).fillna(0)
+        out = (payments * lx.shift(-age) / lx.loc[age]).fillna(0)
         out.index.rename('year', inplace=True)
         return out
 
@@ -244,8 +244,8 @@ class LifeTable(object):
                                                       row['gender'],
                                                       intrest,
                                                       rounding=False), axis=1)
-        s['hx_avg'] = s.apply(lambda row: (self.hx[row['gender']].ix[row['age']].values[0] +
-                                           self.hx[row['gender']].ix[row['age'] + 1].values[0]) / 2., axis=1)
+        s['hx_avg'] = s.apply(lambda row: (self.hx[row['gender']].loc[row['age']].values[0] +
+                                           self.hx[row['gender']].loc[row['age'] + 1].values[0]) / 2., axis=1)
         s['alpha1'] = s.apply(lambda row: self.adjust[row['gender']]['partner']['CX1'], axis=1)
         s['factor'] = s.apply(lambda row: self.adjust[row['gender']]['partner']['fnett'] *
                                           self.adjust[row['gender']]['partner']['fcorr'] *
@@ -332,10 +332,10 @@ class LifeTable(object):
                              tbl_insured_alpha2, pension_age - age_insured)
         f2 = f2 * self.cf_annuity(current_age_beneficiary,
                                   tbl_beneficiary, pension_age - age_insured)
-        temp1 = ((float(tbl_insured_alpha1.ix[pension_age + alpha1]) /
-                  tbl_insured_alpha1.ix[current_age_alpha1]))
-        temp2 = ((float(tbl_insured_alpha2.ix[current_age_alpha2]) /
-                  tbl_insured_alpha2.ix[pension_age + alpha2]))
+        temp1 = ((float(tbl_insured_alpha1.loc[pension_age + alpha1]) /
+                  tbl_insured_alpha1.loc[current_age_alpha1]))
+        temp2 = ((float(tbl_insured_alpha2.loc[current_age_alpha2]) /
+                  tbl_insured_alpha2.loc[pension_age + alpha2]))
         f2 = f2 * temp1 * temp2
         out = fnett * fcorr * fOTS * (ay - axy + (f1 - f2))
         # print(ay, axy, f1, f2)
@@ -374,13 +374,13 @@ class LifeTable(object):
             hx_at_pensionage = 1
         elif hx_pd == 'ukv':
             try:
-                hx_at_pensionage = self.ukv.ix[(sex_insured, pension_age,
+                hx_at_pensionage = self.ukv.loc[(sex_insured, pension_age,
                                                 kwargs['intrest'])].values[0]
             except:
                 print('Undefined partner cashflows require UKV -- defaults hx_pd = 1')
                 hx_at_pensionage = 1
         else:
-            hx_at_pensionage = self.hx[sex_insured]['hx'].ix[pension_age]
+            hx_at_pensionage = self.hx[sex_insured]['hx'].loc[pension_age]
 
         fnett, fcorr, fOTS = (self.adjust[sex_insured]['partner'][item]
                               for item in ['fnett', 'fcorr', 'fOTS'])
@@ -393,8 +393,8 @@ class LifeTable(object):
             self.lookup = lookup
             self.intrest = intrest
 
-        cf_till_pension_age = (lookup.ix[sex_insured].
-                                   ix[age_insured:pension_age - 1])
+        cf_till_pension_age = (lookup.loc[sex_insured].
+                                   loc[age_insured:pension_age - 1])
         current_age = age_insured  # we need [k]q[current_age]
         cf_till_pension_age['age'] = cf_till_pension_age.index
         nq_current_age = cf_till_pension_age.apply(lambda row:
@@ -455,7 +455,7 @@ class LifeTable(object):
         pension_age: int
         """
 
-        hx_avg = (self.hx[sex_insured].ix[age_insured].values[0] + self.hx[sex_insured].ix[age_insured + 1].values[
+        hx_avg = (self.hx[sex_insured].loc[age_insured].values[0] + self.hx[sex_insured].loc[age_insured + 1].values[
             0]) / 2.
         cf_defined_one_year_risk = self.cf_defined_one_year_risk(age_insured, sex_insured, pension_age, **kwargs)
         cf = hx_avg * cf_defined_one_year_risk['payments']
