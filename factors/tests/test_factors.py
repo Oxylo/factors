@@ -7,7 +7,7 @@ def test_ag2014_data(ag_table):
     testdata = tables.run_test()
     assert testdata is not None
     error_squared = np.sum(testdata['difference'] * testdata['difference'])
-    assert error_squared < 3.5
+    assert error_squared < 3.5e-5
 
 
 def test_aeg2011_data(aegon_table):
