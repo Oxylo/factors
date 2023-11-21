@@ -1,4 +1,5 @@
-env
+# virtual environments
+venv
 
 # macOS
 *.DS_Store
