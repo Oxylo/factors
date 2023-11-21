@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-import xlrd
+import openpyxl
 
 from factors.settings import (UPAGE, LOWAGE, MAXAGE, INSURANCE_IDS,
                               MALE, FEMALE, DATADIR)
@@ -54,8 +54,8 @@ class LifeTable(object):
         self.yield_curve = None
 
     def get_sheet_names(self):
-        wb = xlrd.open_workbook(self.excel_filepath, on_demand=True)
-        return wb.sheet_names()
+        wb = openpyxl.open(self.excel_filepath)
+        return wb.sheetnames
 
     def xls_contains_all_required_sheets(self):
         return all(x in self.sheet_names for x in REQUIRED_SHEETS)
