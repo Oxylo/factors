@@ -39,7 +39,6 @@ setup(
     zip_safe=False,
     install_requires=[
         'pandas>=0.23.3',
-        'xlrd>=1.1.0',
         'openpyxl>=2.5.4',
     ],
     test_suite='pytest',
