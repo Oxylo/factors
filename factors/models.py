@@ -413,7 +413,8 @@ class LifeTable(object):
         cf_after_pension_age = pd.DataFrame(cf_after_pension_age, columns=['cf'])
         cf_after_pension_age['age'] = cf_after_pension_age.index + pension_age
         cf_after_pension_age.set_index('age', inplace=True)
-        cf = cf_till_pension_age.append(cf_after_pension_age)
+        ### as of pandas 2.0 append has been removed :  cf = cf_till_pension_age.append(cf_after_pension_age)
+        cf = pd.concat([cf_till_pension_age, cf_after_pension_age])
         cf = pd.DataFrame(cf)
         cf['year'] = range(len(cf))
         cf.set_index('year', inplace=True)
