@@ -69,9 +69,10 @@ And for running the code interactively, install Jupyter notebook:
     tab = LifeTable("AG2022", calc_year=2022)
     tab.run_test()
 
-[changelog]: CHANGELOG.md
-[pypi-version]: https://img.shields.io/pypi/v/factors.svg
-
+3. Changelog and Contributions
+------------------------------
+For changelog, see CHANGELOG.md
+If you would like to contribute, see CONTRIBUTING.rst
 
 
 
