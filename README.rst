@@ -31,7 +31,7 @@ And for running the code interactively, install Jupyter notebook:
 2. Examples
 -----------
 
-# 2.1 Generate actuarial factors for specific LifeTable at fixed intrest rate
+*2.1 Generate actuarial factors AG2022 at 2% fixed intrest rate*
 
 .. code-block:: console
   
@@ -39,10 +39,10 @@ And for running the code interactively, install Jupyter notebook:
     lifetab = LifeTable("AG2022", calc_year=2022)
     all_tabs = lifetab.calculate_factors(intrest=2, pension_age=68)
 
+*2.2 Generate cash flows for AG2018, useful for discounting with yield curve*
 
 .. code-block:: console
-   :caption: Generate table with cash flows, useful when using yield curves 
-
+    
     from factors import LifeTable
     lifetab = LifeTable("AG2018", calc_year=2020)
     opll = lifetab.cf_retirement_pension(age_insured=68, sex_insured='M', pension_age=68)
@@ -51,19 +51,20 @@ And for running the code interactively, install Jupyter notebook:
     df = pd.DataFrame({'OPLL': opll['payments'], 'NPLL': npll['payments'], 'NPLL_ondefined': npll_od['payments']})
     all_tabs = lifetab.calculate_factors(intrest=2, pension_age=68)
 
+*2.3 Compare life expectancy of AG2014 and AG2016 at the calculation year of the most recent table*
 
 .. code-block:: console
-   :caption: Compare life expectancy of two different tables at the calculation year of the most recent table
-
+   
     from factors import LifeTable
     tab2014 = LifeTable("AG2014", calc_year=2016)
     life_expectancy_ag2014 = tab2014.lx(current_age=0)['M'].sum()
     tab2016 = LifeTable("AG2016", calc_year=2016)
     life_expectancy_ag2016 = tab2016.lx(current_age=0)['M'].sum()
 
-.. code-block:: console
-   :caption: Run unit tests
+*2.4 Run unit tests*
 
+.. code-block:: console
+   
     from factors import LifeTable
     tab = LifeTable("AG2022", calc_year=2022)
     tab.run_test()
