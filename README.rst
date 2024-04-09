@@ -2,7 +2,7 @@
 factors
 =======
 
-Generate actuarial factors for several Dutch tables like AG2014, AG2016, AG2018, AG2020, AG2022, etc.
+Generate actuarial factors Dutch tables like AG2014, AG2016, AG2018, AG2020, AG2022, etc.
 
 1. Installation
 ---------------
@@ -68,6 +68,9 @@ And for running the code interactively, install Jupyter notebook:
     from factors import LifeTable
     tab = LifeTable("AG2022", calc_year=2022)
     tab.run_test()
+
+[changelog]: CHANGELOG.md
+[pypi-version]: https://img.shields.io/pypi/v/factors.svg
 
 
 
