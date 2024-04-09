@@ -5,7 +5,7 @@ factors
 Generate actuarial factors for several Dutch tables like AG2014, AG2016, AG2018, AG2020, AG2022, etc.
 
 1. Installation
-------------
+---------------
 
 Create a virtual environment:
 
@@ -29,11 +29,12 @@ And for running the code interactively, install Jupyter notebook:
     pip install notebook
 
 2. Examples
-------------
+-----------
+
+# 2.1 Generate actuarial factors for specific LifeTable at fixed intrest rate
 
 .. code-block:: console
-   :caption: Generate actuarial factors for specific LifeTable at fixed intrest rate
-
+  
     from factors import LifeTable
     lifetab = LifeTable("AG2022", calc_year=2022)
     all_tabs = lifetab.calculate_factors(intrest=2, pension_age=68)
