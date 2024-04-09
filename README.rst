@@ -2,7 +2,7 @@
 factors
 =======
 
-Generate actuarial factors Dutch tables like AG2014, AG2016, AG2018, AG2020, AG2022, etc.
+Generate actuarial factors and cashflows from several Dutch tables like AG2014, AG2016, AG2018, AG2020, AG2022, etc.
 
 1. Installation
 ---------------
