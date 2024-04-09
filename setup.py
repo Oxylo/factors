@@ -1,46 +1,47 @@
-import os
-import re
+#!/usr/bin/env python
 
-from setuptools import find_packages, setup
+"""The setup script."""
 
+from setuptools import setup, find_packages
 
-def get_version_from_src():
-    with open(os.path.join("factors", "__init__.py"), mode="r") as fh:
-        return re.search("__version__\s*=\s*['\"](.*?)['\"]", fh.read()).group(1)
+with open('README.rst') as readme_file:
+    readme = readme_file.read()
 
+with open('HISTORY.rst') as history_file:
+    history = history_file.read()
 
-def readme():
-    with open('README.md') as f:
-        return f.read()
+requirements = ['Click>=7.0', ]
 
+test_requirements = ['pytest>=3', ]
 
 setup(
-    name='factors',
-    version=get_version_from_src(),
-    packages=find_packages(),
-    include_package_data=True,
-    
+    author="Pieter Marres",
+    author_email='pmarres@quantsense.io',
+    python_requires='>=3.6',
     classifiers=[
-        'Development Status :: 3 - Alpha',
-        'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3.5',
+        'Development Status :: 2 - Pre-Alpha',
+        'Intended Audience :: Developers',
+        'Natural Language :: English',
+        'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
     ],
-    description='Generates actuarial factors for premium calculations.',
-    long_description=readme(),
-    long_description_content_type='text/markdown',
-    author='Pieter Marres',
-    author_email='pmarres@oxylo.com',
-    maintainer='Pieter Marres',
-    maintainer_email='pmarres@oxylo.com',
-    license='MIT',
-    url='https://github.com/Oxylo/factors',
-    download_url='https://github.com/Oxylo/factors/archive/{version}.tar.gz'.format(version=get_version_from_src()),
+    description="Making pension pring DNB scenarios.",
+    entry_points={
+        'console_scripts': [
+            'factors=factors.cli:main',
+        ],
+    },
+    install_requires=requirements,
+    long_description=readme + '\n\n' + history,
+    include_package_data=True,
+    keywords='factors',
+    name='factors',
+    packages=find_packages(include=['factors', 'factors.*']),
+    test_suite='tests',
+    tests_require=test_requirements,
+    url='https://github.com/pmarres/factors',
+    version='0.1.0',
     zip_safe=False,
-    install_requires=[
-        'pandas>=0.23.3',
-        'openpyxl>=2.5.4',
-    ],
-    test_suite='pytest',
-    tests_require=['pytest'],
 )

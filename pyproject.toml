@@ -1,0 +1,25 @@
+[project]
+name = "factors"
+description = "package for generating actuarial factors"
+version = "0.1.0"
+authors = [
+    { name = "Pieter Marres", email = "pmarres@quantsense.io" }
+]
+dependencies = [
+    "pandas==2.0.3",
+    "xlrd==1.2.0",
+    "openpyxl==3.1.2"
+]
+
+[project.optional-dependencies]
+dev = [
+    "tox",
+    "flake8",
+    "pytest==7.4.3"
+]
+
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
+
+
