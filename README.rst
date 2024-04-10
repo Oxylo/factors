@@ -43,13 +43,14 @@ And for running the code interactively, install Jupyter notebook:
 
 .. code-block:: console
     
+    import pandas as pd
     from factors import LifeTable
     lifetab = LifeTable("AG2018", calc_year=2020)
     opll = lifetab.cf_retirement_pension(age_insured=68, sex_insured='M', pension_age=68)
     npll = lifetab.cf_defined_partner(age_insured=65,sex_insured='F',pension_age=68)
     npll_od = lifetab.cf_undefined_partner(age_insured=65,sex_insured='F',pension_age=68)
-    df = pd.DataFrame({'OPLL': opll['payments'], 'NPLL': npll['payments'], 'NPLL_ondefined': npll_od['payments']})
-    all_tabs = lifetab.calculate_factors(intrest=2, pension_age=68)
+    cashflows = pd.DataFrame({'OPLL': opll['payments'], 'NPLL': npll['payments'], 'NPLL_ondefined': npll_od['payments']})
+    
 
 *2.3 Compare life expectancy of AG2014 and AG2016 at the calculation year of the most recent table*
 
@@ -57,16 +58,19 @@ And for running the code interactively, install Jupyter notebook:
    
     from factors import LifeTable
     tab2014 = LifeTable("AG2014", calc_year=2016)
-    life_expectancy_ag2014 = tab2014.lx(current_age=0)['M'].sum()
+    life_expectancy_ag2014 = tab2014.lx(current_age=0)['M'].sum() - 0.5
     tab2016 = LifeTable("AG2016", calc_year=2016)
-    life_expectancy_ag2016 = tab2016.lx(current_age=0)['M'].sum()
+    life_expectancy_ag2016 = tab2016.lx(current_age=0)['M'].sum() - 0.5
+    change = life_expectancy_ag2016 - life_expectancy_ag2014 
+
+    
 
 *2.4 Run unit tests*
 
 .. code-block:: console
    
     from factors import LifeTable
-    tab = LifeTable("AG2022", calc_year=2022)
+    tab = LifeTable("AG2014", calc_year=2017)
     tab.run_test()
 
 3. Changelog and Contributions
