@@ -34,3 +34,54 @@ def write_workbook(
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         for sheet_name, dataframe in dataframes.items():
             dataframe.to_excel(writer, sheet_name=sheet_name, index=False)
+
+
+def explode(dataframe: pd.DataFrame, explode_factor: int = 12) -> pd.DataFrame:
+    """Repeat each dataframe row a fixed number of times.
+
+    Parameters
+    ----------
+    dataframe : pandas.DataFrame
+        Dataframe whose rows should be repeated.
+    explode_factor : int
+        Number of times to repeat each row. Must be positive. Defaults to 12.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Dataframe with repeated rows and a two-level index. The first level
+        contains the original index and the second level contains subindices
+        from zero to ``explode_factor - 1``.
+    """
+    if not isinstance(explode_factor, int) or explode_factor < 1:
+        raise ValueError("explode_factor must be a positive integer")
+
+    exploded = dataframe.loc[dataframe.index.repeat(explode_factor)].copy()
+    exploded.index = pd.MultiIndex.from_product(
+        [dataframe.index, range(explode_factor)],
+        names=["index", "subindex"],
+    )
+    return exploded
+
+
+def calculate_forward_rate_yearly(rates: pd.Series) -> pd.Series:
+    """Calculate yearly forward rates from a rate Series.
+
+    Parameters
+    ----------
+    rates : pandas.Series
+        Series whose index contains durations in years and whose values are
+        rate percentages.
+
+    Returns
+    -------
+    pandas.Series
+        Yearly forward rates with the same index as ``rates``.
+    """
+    factors = 1 + rates
+    shifted_factors = factors.shift(1).fillna(1)
+    return pd.Series(
+        factors ** rates.index / shifted_factors ** (rates.index - 1) - 1,
+        index=rates.index,
+        name="forward_rate_yearly",
+    )
