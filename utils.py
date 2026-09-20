@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 
@@ -85,3 +86,64 @@ def calculate_forward_rate_yearly(rates: pd.Series) -> pd.Series:
         index=rates.index,
         name="forward_rate_yearly",
     )
+
+
+def convert_yearly_to_monthly(
+    rates: pd.Series, explode_factor: int = 12
+) -> pd.DataFrame:
+    """Convert yearly forward rates to monthly forward and spot rates.
+
+    Parameters
+    ----------
+    rates : pandas.Series
+        Yearly forward rates indexed by year durations.
+    explode_factor : int, optional
+        Number of monthly periods per year. Defaults to 12.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Monthly forward and sport rates, named 'forward_rate_monthly' and 'spot_rate_monthy.
+    """
+    monthly_forward_rates = (
+        explode(rates, explode_factor=explode_factor)
+        .reset_index()
+        .assign(
+            forward_rate_yearly_factor=lambda row: (1 + row["forward_rate_yearly"])
+            ** (1 / explode_factor)
+        )
+        .assign(product=lambda row: row["forward_rate_yearly_factor"].cumprod())
+        .assign(monthnr=lambda row: row.index + 1)
+        .assign(spot_rate_monthly=lambda row: row["product"] ** (1 / row["monthnr"]) - 1)
+        .assign(
+            spot_rate_monthly_factor=lambda row: 1 + row["spot_rate_monthly"]
+        )
+        .assign(
+                    forward_rate_monthly=lambda row: (
+                        row["forward_rate_yearly_factor"] - 1
+                    )
+                )
+        .ffill()
+        .assign(maturity = lambda x: x.index + 1)
+        .set_index("maturity")
+        .loc[:, ["forward_rate_monthly", "spot_rate_monthly"]]
+    )
+    return monthly_forward_rates
+    
+
+def run_testcase(df: pd.DataFrame, full_test: bool = False) -> pd.DataFrame | pd.Series:
+    """Run a test case to verify the correctness of the dataframe.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Dataframe to test.
+    """
+    # Test case: age 2 years and 10 months, female
+    test_case = df[(df.age0_months == 2 * 12 + 10) & (df.gender == "F")]
+    result = test_case.drop("gender", axis=1)
+    print("Test case result for age 2 years and 10 months, female:")
+    if full_test:
+        return result
+    else:
+        return result.sum()
