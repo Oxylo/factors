@@ -69,7 +69,6 @@ df = (pd.MultiIndex.from_product(
     .drop(columns=["step_function_prae", "step_function_post"])
 )
 
-out = run_testcase(df, full_test=True)
 
 # normalize tables to long format for merging
 es_x_long = (data["es"]
@@ -113,7 +112,8 @@ tab_hx = (data["hxy"]
 # merge all tables into one dataframe
 df2 = (df.copy()
       .merge(es_x_long, how="left", left_on=["age_year_component_shifted", "gender"], right_index=True)
-      .merge(tab_q_long, how="inner", left_on=["age_year_component_shifted", "calendar_year_shifted", "gender"], right_index=True)
+      .merge(tab_q_long, how="inner", left_on=["age_year_component", "calendar_year", "gender"], right_index=True)
+      .assign(qx=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["qx"].shift().fillna(0))
       .assign(gender_partner=lambda x: np.where(x["gender"] == "M", "F", "M"))
       .assign(qx_year=lambda x: x["qx"] * x["es_x"])
       .fillna({"qx_year": 0})
@@ -129,12 +129,18 @@ df2 = (df.copy()
       .assign(age_y_year_component=lambda x: x["age_y_months"] // 12)
       .assign(age_y_month_component=lambda x: x["age_y_months"] % 12)
       .assign(age_y_year_component_shifted=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["age_y_year_component"].shift())
-      .merge(tab_q_long, how="left", left_on=["age_y_year_component_shifted", "calendar_year_shifted", "gender_partner"], right_index=True)
+      .merge(tab_q_long, how="inner", left_on=["age_y_year_component", "calendar_year", "gender_partner"], right_index=True)
+
+      # HIER VERDER
       .rename(columns={"qx_x": "qx", "qx_y": "qy"}) 
+      .assign(qy=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["qy"].shift().fillna(0))
+
+
+      
       .merge(es_y_long, how="left", left_on=["age_y_year_component_shifted", "gender"], right_index=True)
       .drop(columns=["leeftijd_jaren_x", "leeftijd_jaren_y"], errors="ignore")
       .assign(qy_year=lambda x: x["qy"] * x["es_y"])
-      .fillna({"qy_year": 1, "qy_month": 1})
+      .fillna({"qy_year": 0}) # , "qy_month": 1
       .assign(qy_month=lambda x: 1 - (1 - x["qy_year"]) ** (1 / NMAANDEN_PER_JAAR))
       .assign(qy_month=lambda x: np.where(x["index_nr"]==0, 0, x["qy_month"]))
       .assign(py=lambda x: 1 - x["qy_month"])
@@ -169,14 +175,9 @@ df2 = (df.copy()
       .assign(hx_modified=lambda x: x["hx_before_pd"] + x["py_year_avg"]) 
       )
 
-
-out = run_testcase(df2, full_test=True)
-
-
-
-
+#
 # Calculate cashflows
-
+#
 
 # CF OP
 
@@ -232,12 +233,6 @@ if True:
       )
 
 
-
-
-
-
-
-
 # CF INP
 
 
@@ -248,7 +243,8 @@ if True:
       )
 
 
-# CF NPONBEPAALD
+# CF NPONBEPAALD & NPonbep_uitg
+
 
 # post = prae-numerando!
 
@@ -260,31 +256,12 @@ if True:
             .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
                     .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
             .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
+            .assign(b_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["payment_monthly"].shift().fillna(0))
+            .assign(product=lambda x: x["b_shifted"] * x["kqx"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
+            .assign(cfs_unscaled=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["product"].cumsum())
+            .assign(cfs_pp_onbepaald=lambda x: x["cfs_unscaled"] / x["a_cumprod_reverse_shifted"])
+            .assign(cfs_pp_onbepaald_discounted = lambda x: x["cfs_pp_onbepaald"] * x["discount_factor"])
             )
-
-
-out = run_testcase(df2, full_test=True) # ,full_test=True
-
-
-
-           
-            # 
-            # .assign(b_shifted = lambda x: x["b"].shift().fillna(0))
-            # .assign(product=lambda x: x["b_shifted"] * x["c"] * x["d"] * np.sqrt(x["a"]) * x["a_cumprod_reverse_shifted"])
-            # .assign(cf_unscaled=lambda x: x["product"].cumsum())
-            # .assign(cf_pp_onbepaald=lambda x: x["cf_unscaled"] / x["a_cumprod_reverse_shifted"])
-
-
-            
-            
-            #.assign(cfs_nponbepaald = lambda x: x["index_nr"])
-            #.assign(cfs_nponbepaald_discounted = lambda x: x["cfs_nponbepaald"] * x["discount_factor"])
-      # )
-
-
-
-
-
 
 
 # CF NPonbep_uitg
