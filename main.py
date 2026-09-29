@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 
 from utils import (
-    calculate_forward_rate_yearly,
-    convert_yearly_to_monthly,
-    read_workbook, run_testcase
+      calculate_forward_rate_yearly,
+      convert_yearly_to_monthly,
+      read_workbook,
+      run_testcase,
 )
-
 
 fp = "/home/pieter/Insync/Gedeeld/QuantSense/Innovatie en Inspiratie/tarievengenerator/rail26.xlsx"
 data = read_workbook(fp)
@@ -130,13 +130,8 @@ df2 = (df.copy()
       .assign(age_y_month_component=lambda x: x["age_y_months"] % 12)
       .assign(age_y_year_component_shifted=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["age_y_year_component"].shift())
       .merge(tab_q_long, how="inner", left_on=["age_y_year_component", "calendar_year", "gender_partner"], right_index=True)
-
-      # HIER VERDER
       .rename(columns={"qx_x": "qx", "qx_y": "qy"}) 
-      .assign(qy=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["qy"].shift().fillna(0))
-
-
-      
+      .assign(qy=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["qy"].shift().fillna(0))      
       .merge(es_y_long, how="left", left_on=["age_y_year_component_shifted", "gender"], right_index=True)
       .drop(columns=["leeftijd_jaren_x", "leeftijd_jaren_y"], errors="ignore")
       .assign(qy_year=lambda x: x["qy"] * x["es_y"])
@@ -223,7 +218,6 @@ if True:
             .assign(cfs_axy_discounted = lambda x: x["cfs_axy"] * x["discount_factor"])
       )
 
-
 # CF NPBEPAALD
 
 if True:
@@ -232,9 +226,7 @@ if True:
             .assign(cfs_npbepaald_discounted = lambda x: x["cfs_npbepaald"] * x["discount_factor"])
       )
 
-
 # CF INP
-
 
 if True:
      df2 = (df2
@@ -242,17 +234,13 @@ if True:
             .assign(cfs_inp_discounted = lambda x: x["cfs_ax_discounted"])
       )
 
-
-# CF NPONBEPAALD & NPonbep_uitg
-
+ 
+# CF NPONBEPAALD
 
 # post = prae-numerando!
 
-# .assign(py_avg=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["avg"].ffill())
-
 if True:
      df2 = (df2
-            .assign(payment_monthly_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["payment_monthly"].shift())
             .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
                     .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
             .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
@@ -266,12 +254,17 @@ if True:
 
 # CF NPonbep_uitg
 
-# if True:
-#      df2 = (df2
-#             .assign(cfs_nponbepu = lambda x: x["index_nr"])
-#             .assign(cfs_nponbepu_discounted = lambda x: x["cfs_nponbepu"] * x["discount_factor"])
-#       )
-
+if True:
+     df2 = (df2
+            .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
+                    .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
+            .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
+            .assign(b_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["payment"].shift().fillna(0))
+            .assign(product=lambda x: x["b_shifted"] * x["kqx"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
+            .assign(cfs_unscaled=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["product"].cumsum())
+            .assign(cfs_onbepaald_uitgesteld=lambda x: np.where(x["is_active"], 0, x["cfs_unscaled"] / x["a_cumprod_reverse_shifted"]))
+            .assign(cfs_onbepaald_uitgesteld_discounted = lambda x: x["cfs_onbepaald_uitgesteld"] * x["discount_factor"])
+            )
 
 
 # CF OP*
@@ -292,7 +285,6 @@ if True:
       )
 
 
-
 # CF AXN*
 
 if True:
@@ -311,8 +303,6 @@ if True:
       )
 
 
-
-
 # CF SG_AX
 
 if True:
@@ -320,7 +310,6 @@ if True:
             .assign(cfs_sg_ax = lambda x: x["kqx"] * x["step_function"])
             .assign(cfs_sg_ax_discounted = lambda x: x["cfs_sg_ax"] * x["discount_factor"])
       )
-
 
 
 # CF SG_AXN
@@ -332,10 +321,7 @@ if True:
       )
 
 
-
-
 # CF ITNP
-
 
 if True:
      df2 = (df2
@@ -353,15 +339,49 @@ if True:
       )
 
 
+# CF TNPONBEPAALD --> REQUIRES NPONBEPAALD -/- NPONBEP_uitgesteld
 
-# CF TNPONBEPAALD
 
-
-# if True:
-#      df2 = (df2
-#             .assign(cfs_tnponbepaald = lambda x: x["index_nr"])
-#             .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"] * x["step_function"])
-#       )
+if True:
+     df2 = (df2
+            .assign(cfs_tnponbepaald = lambda x: x["cfs_pp_onbepaald"] - x["cfs_onbepaald_uitgesteld"])
+            .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"])
+      )
 
    
-out = run_testcase(df2, full_test=True) # , full_test=True
+out = run_testcase(df2, full_test=False) # , full_test=True
+
+
+selected_cols = ["gender",
+                 "age0_years",
+                 "month",
+                 "cfs_op",
+                 "cfs_ax",
+                 "cfs_axn",
+                 "cfs_ay",
+                 "cfs_axy",
+                 "cfs_npbepaald",
+                 "cfs_ax",
+                 "cfs_pp_onbepaald",
+                 "cfs_onbepaald_uitgesteld",
+                 "cfs_ops",
+                 "cfs_axs",
+                 "cfs_axns",
+                 "cfs_sg_op",
+                 "cfs_sg_ax",
+                 "cfs_sg_axn",
+                 "cfs_itnp",
+                 "cfs_tnpbepaald",
+                 "cfs_tnponbepaald"]
+
+cfs = (df2
+       .loc[:, selected_cols])
+
+tars = (cfs
+        .set_index(["gender", "age0_years", "month"])
+      .mul(df2["discount_factor"].to_numpy(), axis=0)
+      .groupby(["gender", "age0_years", "month"])
+      .sum())
+
+
+
