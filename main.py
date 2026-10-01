@@ -261,10 +261,20 @@ if True:
                     .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
             .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
             .assign(b_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["payment_monthly"].shift().fillna(0))
-            .assign(product=lambda x: x["b_shifted"] * x["kqx_pp"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
+            
+            # NPONBEPAALD
+            .assign(product=lambda x: x["b_shifted"] * x["kqx"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
             .assign(cfs_unscaled=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["product"].cumsum())
             .assign(cfs_pp_onbepaald=lambda x: x["cfs_unscaled"] / x["a_cumprod_reverse_shifted"])
             .assign(cfs_pp_onbepaald_discounted = lambda x: x["cfs_pp_onbepaald"] * x["discount_factor"])
+
+            # NPONBEP_uitgesteld
+            .assign(kqx_uitgesteld=lambda x:np.where((x["age_months"] <= PENSIOENLEEFTIJD_MAANDEN), 0, x["kqx"]))
+            .assign(product_uitgesteld=lambda x: x["b_shifted"] * x["kqx_uitgesteld"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
+            .assign(cfs_unscaled_uitgesteld=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["product_uitgesteld"].cumsum())
+            .assign(cfs_pp_onbepaald_uitgesteld=lambda x: x["cfs_unscaled_uitgesteld"] / x["a_cumprod_reverse_shifted"])
+            .assign(cfs_pp_onbepaald_discounted_uitgesteld = lambda x: x["cfs_pp_onbepaald_uitgesteld"] * x["discount_factor"])
+      
             )
 
 
@@ -340,14 +350,14 @@ if True:
       )
 
 
-# CF TNPONBEPAALD --> REQUIRES NPONBEPAALD -/- NPONBEP_uitgesteld
+# CF TNPONBEPAALD 
 
 
-# if True:
-#      df2_xy = (df2_xy
-#             .assign(cfs_tnponbepaald = lambda x: x["cfs_pp_onbepaald"] - x["cfs_onbepaald_uitgesteld"])
-#             .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"])
-#       )
+if True:
+     df2_xy = (df2_xy
+            .assign(cfs_tnponbepaald = lambda x: x["cfs_pp_onbepaald"] - x["cfs_pp_onbepaald_uitgesteld"])
+            .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"])
+      )
 
 
    
@@ -380,8 +390,9 @@ selected_cols_xy = ["gender",
                     "cfs_axy",
                     "cfs_npbepaald",
                     "cfs_pp_onbepaald",
+                    "cfs_pp_onbepaald_uitgesteld",
                     "cfs_tnpbepaald",
-                    # "cfs_tnponbepaald"
+                    "cfs_tnponbepaald"
                     ]
 
 
