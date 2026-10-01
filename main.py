@@ -123,6 +123,18 @@ df2 = (df.copy()
       .assign(npx_shifted=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["npx"].shift())
       .assign(kqx = lambda x: x["npx_shifted"] * x["qx_month"])
       .fillna({"npx_shifted": 1})
+      .assign(has_payment = lambda x: (x["age_months"] >= startleeftijd_uitkering_maanden + 1 - IS_PRAENUMERANDO) & (x["age_months"] <= eindleeftijd_uitkering_maanden))
+      .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
+      .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
+      .assign(payment = lambda x: PAYMENT_IS_MONTHLY * x["payment_monthly"] + (1 - PAYMENT_IS_MONTHLY) * x["payment_yearly"])
+      .assign(payment_ever = lambda x: PAYMENT_IS_MONTHLY / NMAANDEN_PER_JAAR + (1 - PAYMENT_IS_MONTHLY) * (x["index_nr"] % NMAANDEN_PER_JAAR == 0))
+      .merge(forward_rates_monthly[["spot_rate_monthly"]], how="left", left_on="index_nr", right_index=True)
+      .fillna({"spot_rate_monthly": 1})
+      .assign(discount_factor=lambda x: (1 + x["spot_rate_monthly"])**(-1 * x["index_nr"]))
+      )
+
+
+df2_xy = (df2.copy()
       .merge(delta_age, how="left", left_on="gender", right_index=True)
       .assign(age_y_months=lambda x: x["age_months"] - x["delta_age"])
       .drop(columns=["delta_age"], errors="ignore")
@@ -145,15 +157,8 @@ df2 = (df.copy()
       .merge(tab_hx, how="left", left_on=["age_year_component_shifted_1yr", "gender"], right_index=True, suffixes=("", "_plus1yr"))
       .assign(hx_before_pd=lambda x: np.where(x["age_months_shifted"]>=PENSIOENLEEFTIJD_MAANDEN, 0, (x["hx"] + x["hx_plus1yr"])/2))
       .assign(year_index_nr=lambda x: 1 + x["index_nr"]//12)
-      .assign(maturity=lambda x: x["index_nr"] + 1)
-      .merge(forward_rates_monthly[["spot_rate_monthly"]], how="left", left_on="index_nr", right_index=True)
-      .fillna({"spot_rate_monthly": 1})
-      .assign(discount_factor=lambda x: (1 + x["spot_rate_monthly"])**(-1 * x["index_nr"]))
-      .assign(has_payment = lambda x: (x["age_months"] >= startleeftijd_uitkering_maanden + 1 - IS_PRAENUMERANDO) & (x["age_months"] <= eindleeftijd_uitkering_maanden))
-      .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
-      .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
-      .assign(payment = lambda x: PAYMENT_IS_MONTHLY * x["payment_monthly"] + (1 - PAYMENT_IS_MONTHLY) * x["payment_yearly"])
-      .assign(payment_ever = lambda x: PAYMENT_IS_MONTHLY / NMAANDEN_PER_JAAR + (1 - PAYMENT_IS_MONTHLY) * (x["index_nr"] % NMAANDEN_PER_JAAR == 0))
+      
+      
       # calculate hx_modified
       .assign(is_year_transition=lambda x: np.where((x["age_months"] - 1) % NMAANDEN_PER_JAAR, False, True))
       .assign(is_active=lambda x: np.where(x["age_months"] <= PENSIOENLEEFTIJD_MAANDEN, True, False))
@@ -205,7 +210,7 @@ if True:
 # CF AY
 
 if True:
-     df2 = (df2
+     df2_xy = (df2_xy
             .assign(cfs_ay = lambda x: x["npy"] * x["payment_ever"] * x["step_function"] * np.where((1 - PAYMENT_IS_MONTHLY) * (x["index_nr"] == 0), 0.5, 1))
             .assign(cfs_ay_discounted = lambda x: x["cfs_ay"] * x["discount_factor"])
       )
@@ -213,7 +218,7 @@ if True:
 # CF AXY
 
 if True:
-     df2 = (df2
+     df2_xy = (df2_xy
             .assign(cfs_axy = lambda x: x["npxy"] * x["payment_ever"] * x["step_function"] * np.where((1 - PAYMENT_IS_MONTHLY) * (x["index_nr"] == 0), 0.5, 1))
             .assign(cfs_axy_discounted = lambda x: x["cfs_axy"] * x["discount_factor"])
       )
@@ -221,7 +226,7 @@ if True:
 # CF NPBEPAALD
 
 if True:
-     df2 = (df2
+     df2_xy = (df2_xy
             .assign(cfs_npbepaald = lambda x: x["cfs_ay"] - x["cfs_axy"])
             .assign(cfs_npbepaald_discounted = lambda x: x["cfs_npbepaald"] * x["discount_factor"])
       )
@@ -240,7 +245,13 @@ if True:
 # post = prae-numerando!
 
 if True:
-     df2 = (df2
+     
+     df2_xy = (df2_xy
+            .assign(has_payment = lambda x: x["index_nr"] > 0)
+            .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == x["age0_months"], 0.5, 1))
+            .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
+            .assign(payment = lambda x: PAYMENT_IS_MONTHLY * x["payment_monthly"] + (1 - PAYMENT_IS_MONTHLY) * x["payment_yearly"])   # TO DO: add jaarlijkse betaling
+
             .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
                     .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
             .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
@@ -255,7 +266,7 @@ if True:
 # CF NPonbep_uitg
 
 if True:
-     df2 = (df2
+     df2_xy = (df2_xy
             .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
                     .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
             .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
@@ -333,7 +344,7 @@ if True:
 # CF TNPBEPAALD
 
 if True:
-     df2 = (df2
+     df2_xy = (df2_xy
             .assign(cfs_tnpbepaald = lambda x: np.where(x["has_payment"], x["cfs_ay"] - x["cfs_axy"], 0))
             .assign(cfs_tnpbepaald_discounted = lambda x: x["cfs_tnpbepaald"] * x["discount_factor"])
       )
@@ -343,7 +354,7 @@ if True:
 
 
 if True:
-     df2 = (df2
+     df2_xy = (df2_xy
             .assign(cfs_tnponbepaald = lambda x: x["cfs_pp_onbepaald"] - x["cfs_onbepaald_uitgesteld"])
             .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"])
       )
@@ -352,36 +363,55 @@ if True:
 out = run_testcase(df2, full_test=False) # , full_test=True
 
 
+
 selected_cols = ["gender",
                  "age0_years",
                  "month",
                  "cfs_op",
                  "cfs_ax",
-                 "cfs_axn",
-                 "cfs_ay",
-                 "cfs_axy",
-                 "cfs_npbepaald",
-                 "cfs_ax",
-                 "cfs_pp_onbepaald",
-                 "cfs_onbepaald_uitgesteld",
+                 "cfs_axn",                 
+                 "cfs_ax",                 
                  "cfs_ops",
                  "cfs_axs",
                  "cfs_axns",
                  "cfs_sg_op",
                  "cfs_sg_ax",
                  "cfs_sg_axn",
+                 "cfs_inp",
                  "cfs_itnp",
-                 "cfs_tnpbepaald",
-                 "cfs_tnponbepaald"]
-
-cfs = (df2
-       .loc[:, selected_cols])
-
-tars = (cfs
-        .set_index(["gender", "age0_years", "month"])
-      .mul(df2["discount_factor"].to_numpy(), axis=0)
-      .groupby(["gender", "age0_years", "month"])
-      .sum())
+                 ]
 
 
+selected_cols_xy = ["gender",
+                    "age0_years",
+                    "month",
+                    "cfs_ay",
+                    "cfs_axy",
+                    "cfs_npbepaald",
+                    "cfs_pp_onbepaald",
+                    "cfs_onbepaald_uitgesteld",
+                    "cfs_tnpbepaald",
+                    "cfs_tnponbepaald"
+                    ]
 
+
+# Alleen nog verschil bij OP*, AX*, AXN* (fout in sheet?)
+
+tars = (df2.loc[:, selected_cols].set_index(["gender", "age0_years", "month"])
+        .mul(df2["discount_factor"].to_numpy(), axis=0)
+        .groupby(["gender", "age0_years", "month"])
+        .sum())
+
+# Op twee levens gaan nog niet goed
+
+tars_xy = (df2_xy.loc[:, selected_cols_xy].set_index(["gender", "age0_years", "month"])
+        .mul(df2_xy["discount_factor"].to_numpy(), axis=0)
+        .groupby(["gender", "age0_years", "month"])
+        .sum())
+
+
+
+df2_xy.loc[:, selected_cols_xy].set_index(["gender", "age0_years", "month"]).loc[("F", 2, 10),:]
+                                           
+
+out = run_testcase(df2_xy)
