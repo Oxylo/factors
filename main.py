@@ -157,23 +157,7 @@ df2_xy = (df2.copy()
       .merge(tab_hx, how="left", left_on=["age_year_component_shifted_1yr", "gender"], right_index=True, suffixes=("", "_plus1yr"))
       .assign(hx_before_pd=lambda x: np.where(x["age_months_shifted"]>=PENSIOENLEEFTIJD_MAANDEN, 0, (x["hx"] + x["hx_plus1yr"])/2))
       .assign(year_index_nr=lambda x: 1 + x["index_nr"]//12)
-      
-      
-      # calculate hx_modified
-      .assign(is_year_transition=lambda x: np.where((x["age_months"] - 1) % NMAANDEN_PER_JAAR, False, True))
-      .assign(is_active=lambda x: np.where(x["age_months"] <= PENSIOENLEEFTIJD_MAANDEN, True, False))
-      .assign(py_is_active=lambda x: np.where(x["is_active"], x["py"], 1))
-      .assign(py_is_alive_at_pensionage=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["py_is_active"].transform("prod"))
-      .assign(py_shifted = lambda df:  df.groupby(["gender", "age0_years", "month"], sort=False)["py"].shift().fillna(1))
-      .assign(py_year_fpa=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["py_shifted"].cumprod())
-      .assign(py_year_from_pensionage=lambda x: np.where(x["is_active"], 1, x["py_year_fpa"]/x["py_is_alive_at_pensionage"]))
-      .assign(py_year_from_pensionage_shifted=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["py_year_fpa"].shift(-1 * NMAANDEN_PER_JAAR).fillna(0))
-      .assign(py_year_from_pensionage_shifted=lambda x: np.where(x["is_active"], 1, x["py_year_from_pensionage_shifted"]/x["py_is_alive_at_pensionage"]))
-      .assign(avg=lambda x: np.where(x["is_year_transition"], (x["py_year_from_pensionage"] + x["py_year_from_pensionage_shifted"]) / 2, np.nan))
-      .assign(py_avg=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["avg"].ffill())
-      .assign(py_year_avg=lambda x: np.where(x["age_months"]<= PENSIOENLEEFTIJD_MAANDEN, 0, x["py_avg"]))
-      .assign(hx_modified=lambda x: x["hx_before_pd"] + x["py_year_avg"]) 
-      )
+)
 
 #
 # Calculate cashflows
@@ -240,41 +224,47 @@ if True:
       )
 
  
-# CF NPONBEPAALD
+# CF NPONBEPAALD AND CF NPONBEP_uitgesteld
 
 # post = prae-numerando!
+
+pp_onbepaald_is_uitgesteld = False
+
 
 if True:
      
      df2_xy = (df2_xy
+            .assign(kqx_pp=lambda x: np.where(pp_onbepaald_is_uitgesteld & (x["age_months"] <= PENSIOENLEEFTIJD_MAANDEN), 0, x["kqx"]))
+            
             .assign(has_payment = lambda x: x["index_nr"] > 0)
             .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == x["age0_months"], 0.5, 1))
             .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
             .assign(payment = lambda x: PAYMENT_IS_MONTHLY * x["payment_monthly"] + (1 - PAYMENT_IS_MONTHLY) * x["payment_yearly"])   # TO DO: add jaarlijkse betaling
 
+            # calculate hx_modified
+            .assign(is_year_transition=lambda x: np.where((x["age_months"] - 1) % NMAANDEN_PER_JAAR, False, True))
+            .assign(is_active=lambda x: np.where(x["age_months"] <= PENSIOENLEEFTIJD_MAANDEN, True, False))
+            .assign(py_is_active=lambda x: np.where(x["is_active"], x["py"], 1))
+            .assign(py_is_alive_at_pensionage=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["py_is_active"].transform("prod"))
+            .assign(py_shifted = lambda df:  df.groupby(["gender", "age0_years", "month"], sort=False)["py"].shift().fillna(1))
+            .assign(py_year_fpa=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["py_shifted"].cumprod())
+            .assign(py_year_from_pensionage=lambda x: np.where(x["is_active"], 1, x["py_year_fpa"]/x["py_is_alive_at_pensionage"]))
+            .assign(py_year_from_pensionage_shifted=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["py_year_fpa"].shift(-1 * NMAANDEN_PER_JAAR).fillna(0))
+            .assign(py_year_from_pensionage_shifted=lambda x: np.where(x["is_active"], 1, x["py_year_from_pensionage_shifted"]/x["py_is_alive_at_pensionage"]))
+            .assign(avg=lambda x: np.where(x["is_year_transition"], (x["py_year_from_pensionage"] + x["py_year_from_pensionage_shifted"]) / 2, np.nan))
+            .assign(py_avg=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["avg"].ffill())
+            .assign(py_year_avg=lambda x: np.where(x["age_months"]<= PENSIOENLEEFTIJD_MAANDEN, 0, x["py_avg"]))
+                  .assign(hx_modified=lambda x: x["hx_before_pd"] + x["py_year_avg"]) 
+                  
+
             .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
                     .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
             .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
             .assign(b_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["payment_monthly"].shift().fillna(0))
-            .assign(product=lambda x: x["b_shifted"] * x["kqx"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
+            .assign(product=lambda x: x["b_shifted"] * x["kqx_pp"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
             .assign(cfs_unscaled=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["product"].cumsum())
             .assign(cfs_pp_onbepaald=lambda x: x["cfs_unscaled"] / x["a_cumprod_reverse_shifted"])
             .assign(cfs_pp_onbepaald_discounted = lambda x: x["cfs_pp_onbepaald"] * x["discount_factor"])
-            )
-
-
-# CF NPonbep_uitg
-
-if True:
-     df2_xy = (df2_xy
-            .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
-                    .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
-            .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
-            .assign(b_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["payment"].shift().fillna(0))
-            .assign(product=lambda x: x["b_shifted"] * x["kqx"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
-            .assign(cfs_unscaled=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["product"].cumsum())
-            .assign(cfs_onbepaald_uitgesteld=lambda x: np.where(x["is_active"], 0, x["cfs_unscaled"] / x["a_cumprod_reverse_shifted"]))
-            .assign(cfs_onbepaald_uitgesteld_discounted = lambda x: x["cfs_onbepaald_uitgesteld"] * x["discount_factor"])
             )
 
 
@@ -353,11 +343,12 @@ if True:
 # CF TNPONBEPAALD --> REQUIRES NPONBEPAALD -/- NPONBEP_uitgesteld
 
 
-if True:
-     df2_xy = (df2_xy
-            .assign(cfs_tnponbepaald = lambda x: x["cfs_pp_onbepaald"] - x["cfs_onbepaald_uitgesteld"])
-            .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"])
-      )
+# if True:
+#      df2_xy = (df2_xy
+#             .assign(cfs_tnponbepaald = lambda x: x["cfs_pp_onbepaald"] - x["cfs_onbepaald_uitgesteld"])
+#             .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"])
+#       )
+
 
    
 out = run_testcase(df2, full_test=False) # , full_test=True
@@ -389,9 +380,8 @@ selected_cols_xy = ["gender",
                     "cfs_axy",
                     "cfs_npbepaald",
                     "cfs_pp_onbepaald",
-                    "cfs_onbepaald_uitgesteld",
                     "cfs_tnpbepaald",
-                    "cfs_tnponbepaald"
+                    # "cfs_tnponbepaald"
                     ]
 
 
@@ -415,3 +405,5 @@ df2_xy.loc[:, selected_cols_xy].set_index(["gender", "age0_years", "month"]).loc
                                            
 
 out = run_testcase(df2_xy)
+
+tars_xy.loc[("F", 2, 10),:] * 100
