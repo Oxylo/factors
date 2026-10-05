@@ -28,8 +28,6 @@ forward_rates_monthly = convert_yearly_to_monthly(forward_rate_yearly)
 
 PENSIOENLEEFTIJD_MAANDEN = 12 * 68 # pe_leeftijd_maanden
 
-# system settings
-
 
 # assumptions
 settings = {"STARTJAAR": 2026, "IS_PRAENUMERANDO": False, "PAYMENT_IS_MONTHLY": True, "SPREIDINGSPERIODE_IN_JAREN": 1}
@@ -43,7 +41,7 @@ base = preprocess(data, forward_rates_monthly, settings)
 # Group 1: Annuities
 #
 
-def annuity_calculation(base: dict, label: str, payments_start_age: int, payments_end_age: int, two_lives: bool, settings: dict) -> pd.Series:
+def annuity_calculation(base: dict, settings: dict, label: str="ax", payments_start_age: int|None=None, payments_end_age: int|None=None, two_lives: bool=False) -> pd.Series:
       startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - settings["IS_PRAENUMERANDO"])
       eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
       b = base["df2_xy"] if two_lives else base["df2"]
@@ -60,20 +58,16 @@ def annuity_calculation(base: dict, label: str, payments_start_age: int, payment
              .set_index(["gender", "age0_years", "month", "index_nr"])
              )
 
-op = annuity_calculation(base, "cfs_op", payments_start_age=PENSIOENLEEFTIJD_MAANDEN, payments_end_age=None, two_lives=False, settings=settings)
-ax = annuity_calculation(base, "cfs_ax", payments_start_age=None, payments_end_age=None, two_lives=False, settings=settings)
-axy = annuity_calculation(base, "cfs_axy", payments_start_age=None, payments_end_age=None, two_lives=True, settings=settings)
-axn = annuity_calculation(base, "cfs_axn", payments_start_age=None, payments_end_age=PENSIOENLEEFTIJD_MAANDEN, two_lives=False, settings=settings)
-
+op = annuity_calculation(base, settings=settings, label="cfs_op", payments_start_age=PENSIOENLEEFTIJD_MAANDEN)
+ax = annuity_calculation(base, settings=settings, label="cfs_ax")
+axy = annuity_calculation(base, settings=settings, label="cfs_axy",two_lives=True)
+axn = annuity_calculation(base, settings=settings, label="cfs_axn", payments_end_age=PENSIOENLEEFTIJD_MAANDEN)
 
 #
 # Group 2: Partner Pension
 #
 
-
 # Required for CF NPBEPAALD and CF NPONBEPAALD
-
-
 
 startleeftijd_uitkering_maanden = -np.inf
 eindleeftijd_uitkering_maanden = np.inf
@@ -104,7 +98,6 @@ if True:
  
 # CF NPONBEPAALD AND CF NPONBEP_uitgesteld
 
-# post = prae-numerando!
 
 if True:
      
@@ -182,39 +175,26 @@ if True:
 #
 
 
-# CF SG_OP
+def term_insurance_calculation(base: dict, settings: dict, label: str="Ax", payments_start_age: int|None=None, payments_end_age: int|None=None) -> pd.Series:
+      startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - settings["IS_PRAENUMERANDO"])
+      eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
+     
+      return (base["df2"]
+             .assign(has_payment = lambda x: (x["age_months"] >= startleeftijd_uitkering_maanden) & (x["age_months"] <= eindleeftijd_uitkering_maanden))
+             .assign(has_payment= lambda x: np.where(settings["IS_PRAENUMERANDO"], x["has_payment"], (x["index_nr"] > 0) * x["has_payment"]))
+             .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % system_settings["NMAANDEN_PER_JAAR"] == 0), 1, 0) * np.where(system_settings["NMAANDEN_PER_JAAR"] * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
+             .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/system_settings["NMAANDEN_PER_JAAR"], 0))
+             .assign(payment = lambda x: settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])
+             .assign(cfs = lambda x: x["payment"] * x["kqx"] * x["step_function"] * system_settings["NMAANDEN_PER_JAAR"])
+             .rename(columns={"cfs": label})
+             .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
+             .set_index(["gender", "age0_years", "month", "index_nr"])
+             )
 
-startleeftijd_uitkering_maanden = (PENSIOENLEEFTIJD_MAANDEN + 1 - settings["IS_PRAENUMERANDO"])
-eindleeftijd_uitkering_maanden = np.inf
+sg_op = term_insurance_calculation(base, label="cfs_sg_op", payments_start_age=PENSIOENLEEFTIJD_MAANDEN, settings=settings)
+sg_ax = term_insurance_calculation(base, label="cfs_sg_ax", settings=settings)
+sg_axn = term_insurance_calculation(base, label="cfs_sg_axn", payments_end_age=PENSIOENLEEFTIJD_MAANDEN, settings=settings)
 
-if True:
-     df2 = (base["df2"]
-            .assign(has_payment = lambda x: (x["age_months"] >= startleeftijd_uitkering_maanden) & (x["age_months"] <= eindleeftijd_uitkering_maanden))
-            .assign(has_payment= lambda x: np.where(settings["IS_PRAENUMERANDO"], x["has_payment"], (x["index_nr"] > 0) * x["has_payment"]))
-            .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % system_settings["NMAANDEN_PER_JAAR"] == 0), 1, 0) * np.where(system_settings["NMAANDEN_PER_JAAR"] * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
-            .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/system_settings["NMAANDEN_PER_JAAR"], 0))
-            .assign(payment = lambda x: settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])
-            .assign(cfs_sg_op = lambda x: x["payment"] * x["kqx"] * x["step_function"] * system_settings["NMAANDEN_PER_JAAR"])
-            .assign(cfs_sg_op_discounted = lambda x: x["cfs_sg_op"] * x["discount_factor"])
-      )
-
-
-# CF SG_AX
-
-if True:
-     df2 = (df2
-            .assign(cfs_sg_ax = lambda x: x["kqx"] * x["step_function"])
-            .assign(cfs_sg_ax_discounted = lambda x: x["cfs_sg_ax"] * x["discount_factor"])
-      )
-
-
-# CF SG_AXN
-
-if True:
-     df2 = (df2
-            .assign(cfs_sg_axn = lambda x: x["cfs_sg_ax"] - x["cfs_sg_op"])
-            .assign(cfs_sg_axn_discounted = lambda x: x["cfs_sg_axn"] * x["discount_factor"])
-      )
 
 
 #
@@ -225,9 +205,7 @@ if True:
 ann_1 = pd.concat([op, ax, axn], axis=1).copy()
 ann_2 = axy.copy()
 
-
-
-out = run_testcase(df2, full_test=False) # , full_test=True
+ti = pd.concat([sg_op, sg_ax, sg_axn], axis=1).copy()
 
 
 selected_cols = ["gender",
@@ -255,17 +233,11 @@ selected_cols_xy = ["gender",
                     ]
 
 
-
-# Alleen nog verschil bij OP*, AX*, AXN* (fout in sheet?)
-
-tars = (df2
-        .merge(ann_1, how="left", left_on=["gender", "age0_years", "month", "index_nr"], right_index=True)        
-        .loc[:, selected_cols].set_index(["gender", "age0_years", "month"])
-        .mul(df2["discount_factor"].to_numpy(), axis=0)
+tars = (ann_1
+        .merge(ti, how="left", left_index=True, right_index=True)        
+        .mul(base["df2"]["discount_factor"].to_numpy(), axis=0)
         .groupby(["gender", "age0_years", "month"])
         .sum())
-
-# Op twee levens gaan nog niet goed
 
 tars_xy = (df2_xy
            .loc[:, selected_cols_xy].set_index(["gender", "age0_years", "month"])
@@ -273,22 +245,8 @@ tars_xy = (df2_xy
         .groupby(["gender", "age0_years", "month"])
         .sum())
 
-
-
-# df2_xy.loc[:, selected_cols_xy].set_index(["gender", "age0_years", "month"]).loc[("F", 67, 0),:].sum()
-                                           
-
-# df2_xy.set_index(["gender", "age0_years", "month"]).loc[("F", 67, 0),:].sum().to_excel("~/Desktop/temp6.xlsx")
-
-
-out = run_testcase(df2_xy)
-
-
 # Testresultaten:
 tars.loc[("F", 67, 0),:] * 100
 tars_xy.loc[("F", 67, 0),:] * 100
 
 
-df2_xy.set_index(["gender", "age0_years", "month"]).loc[("F", 2, 10),["has_payment", "payment", "cfs_pp_onbepaald"]].sum()
-
-df2_xy.set_index(["gender", "age0_years", "month"]).loc[("F", 67, 0),["cfs_pp_onbepaald", "cfs_pp_onbepaald_uitgesteld", "cfs_tnponbepaald"]]
