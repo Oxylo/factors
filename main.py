@@ -68,41 +68,44 @@ axn = annuity_calculation(base, settings=settings, label="cfs_axn", payments_end
 # Group 2: Partner Pension
 #
 
-# Required for CF NPBEPAALD and CF NPONBEPAALD
 
-startleeftijd_uitkering_maanden = -np.inf
-eindleeftijd_uitkering_maanden = np.inf
 
-if True:
-     df2_xy = (base["df2_xy"]
+
+def npbepaald_calculation(base: dict, settings: dict, label: str="ax|y", payments_start_age: int|None=None, payments_end_age: int|None=None) -> pd.Series:
+      startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - settings["IS_PRAENUMERANDO"])
+      eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
+      return (base["df2_xy"]
             .assign(has_payment = lambda x: (x["age_months"] >= startleeftijd_uitkering_maanden) & (x["age_months"] <= eindleeftijd_uitkering_maanden))
             .assign(has_payment= lambda x: (x["index_nr"] > 0) * x["has_payment"])   # Note: partnerpension is always postnumerando, so no payment at index_nr = 0
             .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % system_settings["NMAANDEN_PER_JAAR"] == 0), 1, 0) * np.where(system_settings["NMAANDEN_PER_JAAR"] * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
             .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/system_settings["NMAANDEN_PER_JAAR"], 0))
             .assign(payment = lambda x: settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])
-
             .assign(cfs_axy = lambda x: x["npxy"] * x["payment"] * x["step_function"])
-
             .assign(cfs_ay = lambda x: x["npy"] * x["payment_ever"] * x["step_function"] * np.where((1 - settings["PAYMENT_IS_MONTHLY"]) * (x["index_nr"] == 0), 0.5, 1))
             .assign(cfs_ay_discounted = lambda x: x["cfs_ay"] * x["discount_factor"])
-      )
+            .assign(cfs = lambda x: np.where(x["has_payment"], x["cfs_ay"] - x["cfs_axy"], 0))
+            .assign(cfs = lambda x: (1 - settings["IS_PRAENUMERANDO"]) * (x["index_nr"] > 0) * x["cfs"])  # Deze regel moet er waarschijnlijk uit, want partnerpensioen is altijd postnumerando, dus geen betaling bij index_nr = 0
+            .rename(columns={"cfs": label})
+            .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
+            .set_index(["gender", "age0_years", "month", "index_nr"])
+            )
 
+npbep = npbepaald_calculation(base, settings=settings, label="cfs_npbepaald")
+tnpbep = npbepaald_calculation(base, settings=settings, label="cfs_tnpbepaald", payments_end_age=PENSIOENLEEFTIJD_MAANDEN)
 
-# CF NPBEPAALD
-
-if True:
-     df2_xy = (df2_xy
-            .assign(cfs_npbepaald = lambda x: x["cfs_ay"] - x["cfs_axy"])
-            .assign(cfs_npbepaald_discounted = lambda x: x["cfs_npbepaald"] * x["discount_factor"])
-      )
+# =======================================
 
  
 # CF NPONBEPAALD AND CF NPONBEP_uitgesteld
 
 
+startleeftijd_uitkering_maanden = -np.inf
+eindleeftijd_uitkering_maanden = np.inf
+
+
 if True:
      
-     df2_xy = (df2_xy
+     df2_xy = (base["df2_xy"]
             .assign(payment_yearly=lambda x: np.where(x["index_nr"] % system_settings["NMAANDEN_PER_JAAR"] == 0, 1, 0) * np.where(system_settings["NMAANDEN_PER_JAAR"] * x["age_year_component"] == x["age0_months"], 0.5, 1))
             .assign(payment_monthly=lambda x: 1/system_settings["NMAANDEN_PER_JAAR"])
             .assign(payment = lambda x: settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])   # TO DO: add jaarlijkse betaling
@@ -121,7 +124,7 @@ if True:
             .assign(avg=lambda x: np.where(x["is_year_transition"], (x["py_year_from_pensionage"] + x["py_year_from_pensionage_shifted"]) / 2, np.nan))
             .assign(py_avg=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["avg"].ffill())
             .assign(py_year_avg=lambda x: np.where(x["age_months"]<= PENSIOENLEEFTIJD_MAANDEN, 0, x["py_avg"]))
-                  .assign(hx_modified=lambda x: x["hx_before_pd"] + x["py_year_avg"]) 
+            .assign(hx_modified=lambda x: x["hx_before_pd"] + x["py_year_avg"]) 
                   
             # NPONBEPAALD
             .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
@@ -144,17 +147,6 @@ if True:
       
             )
 
-# CF TNPBEPAALD
-
-eindleeftijd_uitkering_maanden = PENSIOENLEEFTIJD_MAANDEN 
-
-if True:
-     df2_xy = (df2_xy
-            .assign(has_payment = lambda x: x["age_months"] <= eindleeftijd_uitkering_maanden)
-            .assign(cfs_tnpbepaald = lambda x: np.where(x["has_payment"], x["cfs_ay"] - x["cfs_axy"], 0))
-            .assign(cfs_tnpbepaald = lambda x: (1 - settings["IS_PRAENUMERANDO"]) * (x["index_nr"] > 0) * x["cfs_tnpbepaald"])
-            .assign(cfs_tnpbepaald_discounted = lambda x: x["cfs_tnpbepaald"] * x["discount_factor"])
-      )
 
 
 # CF TNPONBEPAALD 
@@ -205,26 +197,12 @@ ann_2 = axy.copy()
 
 ti = pd.concat([sg_op, sg_ax, sg_axn], axis=1).copy()
 
-
-selected_cols = ["gender",
-                 "age0_years",
-                 "month",
-                 "cfs_op",
-                 "cfs_ax",
-                 "cfs_axn",
-                 "cfs_axy",                              
-                 "cfs_sg_op",
-                 "cfs_sg_ax",
-                 "cfs_sg_axn"
-                 ]
+partner_pension = pd.concat([npbep, tnpbep, df2_xy.set_index(["gender", "age0_years", "month", "index_nr"])], axis=1).copy()
 
 
-selected_cols_xy = ["gender",
-                    "age0_years",
-                    "month",
-                    "cfs_ay",
-                    "cfs_axy",
-                    "cfs_npbepaald",
+
+
+selected_cols_xy = ["cfs_npbepaald",
                     "cfs_pp_onbepaald",
                     "cfs_pp_onbepaald_uitgesteld",
                     "cfs_tnpbepaald",
@@ -238,8 +216,8 @@ tars = (ann_1
         .groupby(["gender", "age0_years", "month"])
         .sum())
 
-tars_xy = (df2_xy
-           .loc[:, selected_cols_xy].set_index(["gender", "age0_years", "month"])
+tars_xy = (partner_pension
+           .loc[:, selected_cols_xy]
         .mul(df2_xy["discount_factor"].to_numpy(), axis=0)
         .groupby(["gender", "age0_years", "month"])
         .sum())
