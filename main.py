@@ -52,7 +52,8 @@ def annuity_calculation(base: dict, settings: dict, label: str="ax", payments_st
              .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % system_settings["NMAANDEN_PER_JAAR"] == 0), 1, 0) * np.where(system_settings["NMAANDEN_PER_JAAR"] * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
              .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/system_settings["NMAANDEN_PER_JAAR"], 0))
              .assign(payment = lambda x: settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])
-             .assign(cfs = lambda x: x["npx"] * x["payment"] * x["step_function"])
+             .assign(prob_alive = lambda x: x["npxy"] if two_lives else x["npx"])
+             .assign(cfs = lambda x: x["prob_alive"] * x["payment"] * x["step_function"])
              .rename(columns={"cfs": label})
              .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
              .set_index(["gender", "age0_years", "month", "index_nr"])
@@ -122,13 +123,11 @@ if True:
             .assign(py_year_avg=lambda x: np.where(x["age_months"]<= PENSIOENLEEFTIJD_MAANDEN, 0, x["py_avg"]))
                   .assign(hx_modified=lambda x: x["hx_before_pd"] + x["py_year_avg"]) 
                   
-
+            # NPONBEPAALD
             .assign(a_cumprod_reverse=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["py"]
                     .transform(lambda s: s.iloc[::-1].cumprod().iloc[::-1].to_numpy()))
             .assign(a_cumprod_reverse_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["a_cumprod_reverse"].shift(-1).fillna(1))
             .assign(b_shifted=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["payment_monthly"].shift().fillna(0))
-            
-            # NPONBEPAALD
             .assign(product=lambda x: x["b_shifted"] * x["kqx"] * x["hx_modified"] * np.sqrt(x["py"]) * x["a_cumprod_reverse_shifted"])
             .assign(cfs_unscaled=lambda d: d.groupby(["gender", "age0_years", "month"], sort=False)["product"].cumsum())
             .assign(cfs_pp_onbepaald=lambda x: x["cfs_unscaled"] / x["a_cumprod_reverse_shifted"])
@@ -164,7 +163,6 @@ if True:
 if True:
      df2_xy = (df2_xy
             .assign(cfs_tnponbepaald = lambda x: x["cfs_pp_onbepaald"] - x["cfs_pp_onbepaald_uitgesteld"])
-            #.assign(cfs_tnponbepaald = lambda x: (1 - settings["IS_PRAENUMERANDO"]) * (x["index_nr"] > 0) * x["cfs_tnponbepaald"])
             .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"])
       )
 
@@ -202,7 +200,7 @@ sg_axn = term_insurance_calculation(base, label="cfs_sg_axn", payments_end_age=P
 #
 
 
-ann_1 = pd.concat([op, ax, axn], axis=1).copy()
+ann_1 = pd.concat([op, ax, axn, axy], axis=1).copy()
 ann_2 = axy.copy()
 
 ti = pd.concat([sg_op, sg_ax, sg_axn], axis=1).copy()
@@ -213,7 +211,8 @@ selected_cols = ["gender",
                  "month",
                  "cfs_op",
                  "cfs_ax",
-                 "cfs_axn",                              
+                 "cfs_axn",
+                 "cfs_axy",                              
                  "cfs_sg_op",
                  "cfs_sg_ax",
                  "cfs_sg_axn"
