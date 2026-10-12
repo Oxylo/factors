@@ -24,36 +24,31 @@ data = read_workbook(fp)
 # upload_df2db(data["qx"], table_name="AG2024_x", connection_string=conn)
 
 
-test_data= pd.read_excel(testset_fp, sheet_name="testset")
-
-forward_rate_yearly = calculate_forward_rate_yearly(
-    data["rts"].set_index("looptijd_jaren")["pct_rente"]
-)
-
-forward_rates_monthly = convert_yearly_to_monthly(forward_rate_yearly)
-
-
-
 PENSIOENLEEFTIJD_MAANDEN = 12 * 68 # pe_leeftijd_maanden
 
 
 # assumptions
 settings = {"STARTJAAR": 2026, "IS_PRAENUMERANDO": False, "PAYMENT_IS_MONTHLY": True, "SPREIDINGSPERIODE_IN_JAREN": 1}
 
-data = normalize(data)
-base = preprocess(data, forward_rates_monthly, settings)
-
-
 class Assumptions:
-    """
-    Holds the assumptions for the calculations, including start year, whether payments are pre- or postnumerando, payment frequency, and spreading period in years.
-    """
-    def __init__(self, startjaar: int=2026, is_praenumerando: bool=False, payment_is_monthly: bool=True, spreidingsperiode_in_jaren: int=1):
-        self.STARTJAAR = startjaar
-        self.IS_PRAENUMERANDO = is_praenumerando
-        self.PAYMENT_IS_MONTHLY = payment_is_monthly
-        self.SPREIDINGSPERIODE_IN_JAREN = spreidingsperiode_in_jaren
+      """
+      Holds the assumptions for the calculations, including start year, whether payments are pre- or postnumerando, payment frequency, and spreading period in years.
+      """
+      def __init__(self, data: dict, settings: dict):
+            self.data = data
+            self.settings = settings
+            self.base = self.calculate_base()
 
+      def normalize_data(self) -> dict:
+            return normalize(self.data)
+
+      def calculate_base(self) -> dict:
+            normalized_data = self.normalize_data()
+            forward_rates_monthly = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["rts"].set_index("looptijd_jaren")["pct_rente"]))
+            return preprocess(normalized_data, forward_rates_monthly, self.settings)
+
+
+processed_data = Assumptions(data, settings)
 
 class Annuity:
       """
@@ -197,7 +192,7 @@ class TermInsurance:
 #
 
 # annuities
-annuity = Annuity(base, settings=settings)
+annuity = Annuity(processed_data.base, settings=settings)
 
 op = annuity.calculate_cfs(label="cfs_op", payments_start_age=PENSIOENLEEFTIJD_MAANDEN)
 ax = annuity.calculate_cfs(label="cfs_ax")
@@ -207,7 +202,7 @@ ann_1 = pd.concat([op, ax, axn, axy], axis=1).copy()
 
 # partner pension
 
-ppension = PartnerPension(base, settings=settings)
+ppension = PartnerPension(processed_data.base, settings=settings)
 
 npbep = ppension.calculate_cfs_determined(label="cfs_npbepaald")
 tnpbep = ppension.calculate_cfs_determined(label="cfs_tnpbepaald", payments_end_age=PENSIOENLEEFTIJD_MAANDEN)
@@ -217,7 +212,7 @@ partner_pension = pd.concat([npbep, tnpbep, nponbep, tnponbep], axis=1).copy()
 
 # term insurance
 
-tinsurance = TermInsurance(base, settings=settings)
+tinsurance = TermInsurance(processed_data.base, settings=settings)
 
 sg_op = tinsurance.calculate_cfs(label="cfs_sg_op", payments_start_age=PENSIOENLEEFTIJD_MAANDEN)
 sg_ax = tinsurance.calculate_cfs(label="cfs_sg_ax")
@@ -227,12 +222,12 @@ ti = pd.concat([sg_op, sg_ax, sg_axn], axis=1).copy()
 
 tars = (ann_1
         .merge(ti, how="left", left_index=True, right_index=True)        
-        .mul(base["df2"]["discount_factor"].to_numpy(), axis=0)
+        .mul(processed_data.base["df2"]["discount_factor"].to_numpy(), axis=0)
         .groupby(["gender", "age0_years", "month"])
         .sum())
 
 tars_xy = (partner_pension
-           .mul(base["df2_xy"]["discount_factor"].to_numpy(), axis=0)
+           .mul(processed_data.base["df2_xy"]["discount_factor"].to_numpy(), axis=0)
            .groupby(["gender", "age0_years", "month"])
            .sum())
 
