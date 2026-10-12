@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from system_settings import system_settings
+from system_settings import NMAANDEN_PER_JAAR
 
 def read_workbook(path: str | Path) -> dict[str, pd.DataFrame]:
     """Read every sheet in an Excel workbook.
@@ -224,10 +224,10 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
     nages = len(data["qy"])
 
     df = (pd.MultiIndex.from_product(
-        [["M", "F"], data["qy"]["leeftijd_jaren"], np.arange(system_settings["NMAANDEN_PER_JAAR"]), data["qy"]["leeftijd_jaren"], np.arange(system_settings["NMAANDEN_PER_JAAR"])],
+        [["M", "F"], data["qy"]["leeftijd_jaren"], np.arange(NMAANDEN_PER_JAAR), data["qy"]["leeftijd_jaren"], np.arange(NMAANDEN_PER_JAAR)],
         names=["gender", "age0_years", "month", "projection_year_nr", "projection_month_nr"])
         .to_frame(index=False)
-        .assign(index_nr=lambda x: x.projection_year_nr * system_settings["NMAANDEN_PER_JAAR"] + x.projection_month_nr)
+        .assign(index_nr=lambda x: x.projection_year_nr * NMAANDEN_PER_JAAR + x.projection_month_nr)
         .assign(calendar_year=lambda x: settings["STARTJAAR"] + x["projection_year_nr"])
         .assign(age0_months=lambda x: x["age0_years"] * 12 + x["month"])
         .assign(age_months=lambda x: x["age0_months"] + x["projection_year_nr"] * 12 + x["projection_month_nr"])
@@ -254,7 +254,7 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
         .assign(gender_partner=lambda x: np.where(x["gender"] == "M", "F", "M"))
         .assign(qx_year=lambda x: x["qx"] * x["es_x"])
         .fillna({"qx_year": 0})
-        .assign(qx_month=lambda x: 1 - (1 - x["qx_year"]) ** (1 / system_settings["NMAANDEN_PER_JAAR"]))
+        .assign(qx_month=lambda x: 1 - (1 - x["qx_year"]) ** (1 / NMAANDEN_PER_JAAR))
         .assign(px=lambda x: 1 - x["qx_month"])
         .assign(npx=lambda x: x.groupby(["gender", "age0_years", "month"], sort=False)["px"].cumprod())
         .assign(npx_shifted=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["npx"].shift())
@@ -264,7 +264,7 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
         #.assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
         # .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
         #.assign(payment = lambda x: PAYMENT_IS_MONTHLY * x["payment_monthly"] + (1 - PAYMENT_IS_MONTHLY) * x["payment_yearly"])
-        .assign(payment_ever = lambda x: settings["PAYMENT_IS_MONTHLY"] / system_settings["NMAANDEN_PER_JAAR"] + (1 - settings["PAYMENT_IS_MONTHLY"]) * (x["index_nr"] % system_settings["NMAANDEN_PER_JAAR"] == 0))
+        .assign(payment_ever = lambda x: settings["PAYMENT_IS_MONTHLY"] / NMAANDEN_PER_JAAR + (1 - settings["PAYMENT_IS_MONTHLY"]) * (x["index_nr"] % NMAANDEN_PER_JAAR == 0))
         .merge(forward_rates_monthly[["spot_rate_monthly"]], how="left", left_on="index_nr", right_index=True)
         .fillna({"spot_rate_monthly": 1})
         .assign(discount_factor=lambda x: (1 + x["spot_rate_monthly"])**(-1 * x["index_nr"]))
@@ -285,7 +285,7 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
         .drop(columns=["leeftijd_jaren_x", "leeftijd_jaren_y"], errors="ignore")
         .assign(qy_year=lambda x: x["qy"] * x["es_y"])
         .fillna({"qy_year": 0}) # , "qy_month": 1
-        .assign(qy_month=lambda x: 1 - (1 - x["qy_year"]) ** (1 / system_settings["NMAANDEN_PER_JAAR"]))
+        .assign(qy_month=lambda x: 1 - (1 - x["qy_year"]) ** (1 / NMAANDEN_PER_JAAR))
         .assign(qy_month=lambda x: np.where(x["index_nr"]==0, 0, x["qy_month"]))
         .assign(py=lambda x: 1 - x["qy_month"])
         .assign(npy=lambda x: x.groupby(["gender", "age0_years", "month"], sort=False)["py"].cumprod())
@@ -296,3 +296,21 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
     )
 
     return {"df2": df2, "df2_xy": df2_xy}
+
+
+
+def upload_df2db(df: pd.DataFrame, table_name: str, connection_string: str) -> None:
+    """Upload a dataframe to a database table.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Dataframe to upload.
+    table_name : str
+        Name of the target database table.
+    connection_string : str
+        Database connection string.
+    """
+
+    df.to_sql(table_name, con=connection_string, if_exists="replace", index=False)
+    connection_string.close()
