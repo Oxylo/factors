@@ -208,7 +208,7 @@ def normalize(data: dict)-> dict:
     return data
 
 
-def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) -> dict:
+def preprocess(data: dict, forward_rates_monthly: pd.DataFrame) -> dict:
     """Preprocess data for cashflow calculations.
 
     Parameters
@@ -217,9 +217,7 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
         Dictionary where each value is a pandas DataFrame.
     forward_rates_monthly : pd.DataFrame
         DataFrame containing monthly forward rates.
-    settings : dict
-        Dictionary containing parameter settings.
-
+    
     Returns
     -------
     dict

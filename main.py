@@ -20,18 +20,6 @@ fp = os.path.join(data_dir, "rail26.xlsx")
 testset_fp = os.path.join(data_dir, "testset.xlsx")
 data = read_workbook(fp)
 
-
-dat = {"mortality_table": pd.DataFrame,
-       "start_year": int,
-        "delta_x_y_months": int,  
-        "delta_y_x_months": int,
-        "experience_mortality": pd.DataFrame,
-        "interest_curve": pd.DataFrame,
-        "spreading_period": int, 
-        "partner_frequency": pd.DataFrame,
-        "payout_is_praenumerando": bool,  # payout_timing
-        "payout_is_monthly": bool} # payout_frequency
-
 dat = {"mortality_table": merge_mortality_tables(data["qx"], data["qy"]),
        "start_year": 2026,
        "delta_x_y_months": 33,  
@@ -44,34 +32,15 @@ dat = {"mortality_table": merge_mortality_tables(data["qx"], data["qy"]),
        "payout_is_monthly": True}          # payout_frequency
 
 
-                        
-PENSIOENLEEFTIJD_MAANDEN = 12 * 68 # pe_leeftijd_maanden
-
-
- 
-
-
-# assumptions
-settings = {"STARTJAAR": 2026,
-            "IS_PRAENUMERANDO": False,
-            "PAYMENT_IS_MONTHLY": True,
-            "SPREIDINGSPERIODE_IN_JAREN": 1,
-            "DELTA_LEEFTIJD_X_MIN_Y": 33,
-            "DELTA_LEEFTIJD_Y_MIN_X": -18}
-
-settings = {}
-
 class PreProcessor:
       """
       Holds source data and settings for the cashflow calculations and offers some data preprocessing utilities.
 
       Parameters:
-      data (dict): A dictionary containing the following pandas Dataframes: qx, qy, es, hxy, rts 
-      settings (dict): A dictionary containing the following settings: start_year, delta_x_y_months, delta_x_y_months, payout_is_monthly, spreading_period, payout_is_praenuemrando
+      data (dict): A dictionary containing the following pandas Dataframes: qx, qy, es, hxy, rts plus the following settings: start_year, delta_x_y_months, delta_x_y_months, payout_is_monthly, spreading_period, payout_is_praenuemrando
       """
-      def __init__(self, data: dict, settings: dict):
+      def __init__(self, data: dict):
             self.data = data
-            self.settings = settings
             self.base = self.calculate_base()
 
       def normalize_data(self) -> dict:
@@ -80,28 +49,27 @@ class PreProcessor:
       def calculate_base(self) -> dict:
             normalized_data = self.normalize_data()
             forward_rates_monthly = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["interest_curve"].set_index("looptijd_jaren")["pct_rente"]))
-            return preprocess(normalized_data, forward_rates_monthly, self.settings)
+            return preprocess(normalized_data, forward_rates_monthly)
 
 
 class Annuity:
       """
-      Represents an annuity calculation, with methods to compute the cash flows based on the provided base data and settings.
+      Represents an annuity calculation, with methods to compute the cash flows based on the provided (processed) data.
       """
-      def __init__(self, base: dict, settings: dict):
-            self.base = base
-            self.settings = settings
-
+      def __init__(self, processed_data: dict):  
+            self.processed_data = processed_data
+            
       def calculate_cfs(self, label: str="ax", payments_start_age: int|None=None, payments_end_age: int|None=None, two_lives: bool=False) -> pd.Series:
-            startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.settings["IS_PRAENUMERANDO"])
+            startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.processed_data.data["payout_is_praenumerando"])
             eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
-            b = self.base["df2_xy"] if two_lives else self.base["df2"]
+            b = self.processed_data.base["df2_xy"] if two_lives else self.processed_data.base["df2"]
 
             return (b
                   .assign(has_payment = lambda x: (x["age_months"] >= startleeftijd_uitkering_maanden) & (x["age_months"] <= eindleeftijd_uitkering_maanden))
-                  .assign(has_payment= lambda x: np.where(self.settings["IS_PRAENUMERANDO"], x["has_payment"], (x["index_nr"] > 0) * x["has_payment"]))
+                  .assign(has_payment= lambda x: np.where(self.processed_data.data["payout_is_praenumerando"], x["has_payment"], (x["index_nr"] > 0) * x["has_payment"]))
                   .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
                   .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
-                  .assign(payment = lambda x: self.settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - self.settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])
+                  .assign(payment = lambda x: self.processed_data.data["payout_is_monthly"] * x["payment_monthly"] + (1 - self.processed_data.data["payout_is_monthly"]) * x["payment_yearly"])
                   .assign(prob_alive = lambda x: x["npxy"] if two_lives else x["npx"])
                   .assign(cfs = lambda x: x["prob_alive"] * x["payment"] * x["step_function"])
                   .rename(columns={"cfs": label})
@@ -112,26 +80,25 @@ class Annuity:
 
 class PartnerPension:
       """
-      Represents a partner pension calculation, with methods to compute the cash flows based on the provided base data and settings.
+      Represents a partner pension calculation, with methods to compute the cash flows based on the provided (processed) data.
       """
-      def __init__(self, base: dict, settings: dict):
-            self.base = base
-            self.settings = settings
-
+      def __init__(self, processed_data: dict):  
+            self.processed_data = processed_data
+            
       def calculate_cfs_determined(self, label: str="ax|y", payments_start_age: int|None=None, payments_end_age: int|None=None) -> pd.Series:
-            startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.settings["IS_PRAENUMERANDO"])
+            startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.processed_data.data["payout_is_praenumerando"])
             eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
-            return (self.base["df2_xy"]
+            return (self.processed_data.base["df2_xy"]
                   .assign(has_payment = lambda x: (x["age_months"] >= startleeftijd_uitkering_maanden) & (x["age_months"] <= eindleeftijd_uitkering_maanden))
                   .assign(has_payment= lambda x: (x["index_nr"] > 0) * x["has_payment"])   # Note: partnerpension is always postnumerando, so no payment at index_nr = 0
                   .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
                   .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
-                  .assign(payment = lambda x: self.settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - self.settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])
+                  .assign(payment = lambda x: self.processed_data.data["payout_is_monthly"] * x["payment_monthly"] + (1 - self.processed_data.data["payout_is_monthly"]) * x["payment_yearly"])
                   .assign(cfs_axy = lambda x: x["npxy"] * x["payment"] * x["step_function"])
-                  .assign(cfs_ay = lambda x: x["npy"] * x["payment_ever"] * x["step_function"] * np.where((1 - self.settings["PAYMENT_IS_MONTHLY"]) * (x["index_nr"] == 0), 0.5, 1))
+                  .assign(cfs_ay = lambda x: x["npy"] * x["payment_ever"] * x["step_function"] * np.where((1 - self.processed_data.data["payout_is_monthly"]) * (x["index_nr"] == 0), 0.5, 1))
                   .assign(cfs_ay_discounted = lambda x: x["cfs_ay"] * x["discount_factor"])
                   .assign(cfs = lambda x: np.where(x["has_payment"], x["cfs_ay"] - x["cfs_axy"], 0))
-                  .assign(cfs = lambda x: (1 - self.settings["IS_PRAENUMERANDO"]) * (x["index_nr"] > 0) * x["cfs"])  # Deze regel moet er waarschijnlijk uit, want partnerpensioen is altijd postnumerando, dus geen betaling bij index_nr = 0
+                  .assign(cfs = lambda x: (1 - self.processed_data.data["payout_is_praenumerando"]) * (x["index_nr"] > 0) * x["cfs"])  # Deze regel moet er waarschijnlijk uit, want partnerpensioen is altijd postnumerando, dus geen betaling bij index_nr = 0
                   .rename(columns={"cfs": label})
                   .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
                   .set_index(["gender", "age0_years", "month", "index_nr"])
@@ -139,10 +106,10 @@ class PartnerPension:
 
       def calculate_cfs_indetermined(self, label: str="ax|yh", pension_age_months: int=DEFAULT_PENSION_AGE_MONTHS, lifelong_payments: bool=True) -> pd.Series:
 
-            b =  (self.base["df2_xy"]
+            b =  (self.processed_data.base["df2_xy"]
                   .assign(payment_yearly=lambda x: np.where(x["index_nr"] % NMAANDEN_PER_JAAR == 0, 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == x["age0_months"], 0.5, 1))
                   .assign(payment_monthly=lambda x: 1/NMAANDEN_PER_JAAR)
-                  .assign(payment = lambda x: self.settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - self.settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])   
+                  .assign(payment = lambda x: self.processed_data.data["payout_is_monthly"] * x["payment_monthly"] + (1 - self.processed_data.data["payout_is_monthly"]) * x["payment_yearly"])   
 
                   # hx_modified
                   .assign(hx_before_pd=lambda x: np.where(x["age_months_shifted"]>=pension_age_months, 0, (x["hx"] + x["hx_plus1yr"])/2))      
@@ -196,22 +163,21 @@ class PartnerPension:
 
 class TermInsurance:
       """
-      Represents a term insurance calculation, with methods to compute the cash flows based on the provided base data and settings.
+      Represents a term insurance calculation, with methods to compute the cash flows based on the provided (processed) data.
       """
-      def __init__(self, base: dict, settings: dict):
-            self.base = base
-            self.settings = settings
-
+      def __init__(self, processed_data: dict):  # base --> processed_data.base  | settings --> processed_data.data
+            self.processed_data = processed_data
+            
       def calculate_cfs(self, label: str="Ax", payments_start_age: int|None=None, payments_end_age: int|None=None) -> pd.Series:
-            startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.settings["IS_PRAENUMERANDO"])
+            startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.processed_data.data["payout_is_praenumerando"])
             eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
       
-            return (self.base["df2"]
+            return (self.processed_data.base["df2"]
                   .assign(has_payment = lambda x: (x["age_months"] >= startleeftijd_uitkering_maanden) & (x["age_months"] <= eindleeftijd_uitkering_maanden))
-                  .assign(has_payment= lambda x: np.where(self.settings["IS_PRAENUMERANDO"], x["has_payment"], (x["index_nr"] > 0) * x["has_payment"]))
+                  .assign(has_payment= lambda x: np.where(self.processed_data.data["payout_is_praenumerando"], x["has_payment"], (x["index_nr"] > 0) * x["has_payment"]))
                   .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
                   .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
-                  .assign(payment = lambda x: self.settings["PAYMENT_IS_MONTHLY"] * x["payment_monthly"] + (1 - self.settings["PAYMENT_IS_MONTHLY"]) * x["payment_yearly"])
+                  .assign(payment = lambda x: self.processed_data.data["payout_is_monthly"] * x["payment_monthly"] + (1 - self.processed_data.data["payout_is_monthly"]) * x["payment_yearly"])
                   .assign(cfs = lambda x: x["payment"] * x["kqx"] * x["step_function"] * NMAANDEN_PER_JAAR)
                   .rename(columns={"cfs": label})
                   .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
@@ -224,10 +190,12 @@ class TermInsurance:
 # Run test cases
 #
 
-processed_data = PreProcessor(dat, settings)
+PENSIOENLEEFTIJD_MAANDEN = 12 * 68 # pe_leeftijd_maanden
+
+processed_data = PreProcessor(dat)
 
 # annuities
-annuity = Annuity(processed_data.base, settings=processed_data.data)
+annuity = Annuity(processed_data)
 
 op = annuity.calculate_cfs(label="cfs_op", payments_start_age=PENSIOENLEEFTIJD_MAANDEN)
 ax = annuity.calculate_cfs(label="cfs_ax")
@@ -237,7 +205,7 @@ ann_1 = pd.concat([op, ax, axn, axy], axis=1).copy()
 
 # partner pension
 
-ppension = PartnerPension(processed_data.base, settings=settings)
+ppension = PartnerPension(processed_data)
 
 npbep = ppension.calculate_cfs_determined(label="cfs_npbepaald")
 tnpbep = ppension.calculate_cfs_determined(label="cfs_tnpbepaald", payments_end_age=PENSIOENLEEFTIJD_MAANDEN)
@@ -247,7 +215,7 @@ partner_pension = pd.concat([npbep, tnpbep, nponbep, tnponbep], axis=1).copy()
 
 # term insurance
 
-tinsurance = TermInsurance(processed_data.base, settings=settings)
+tinsurance = TermInsurance(processed_data)
 
 sg_op = tinsurance.calculate_cfs(label="cfs_sg_op", payments_start_age=PENSIOENLEEFTIJD_MAANDEN)
 sg_ax = tinsurance.calculate_cfs(label="cfs_sg_ax")
