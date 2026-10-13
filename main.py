@@ -30,7 +30,7 @@ dat = {"mortality_table": pd.DataFrame,
         "spreading_period": int, 
         "partner_frequency": pd.DataFrame,
         "payout_is_praenumerando": bool,  # payout_timing
-        "payout_is_montly": bool} # payout_frequency
+        "payout_is_monthly": bool} # payout_frequency
 
 dat = {"mortality_table": merge_mortality_tables(data["qx"], data["qy"]),
        "start_year": 2026,
@@ -40,8 +40,8 @@ dat = {"mortality_table": merge_mortality_tables(data["qx"], data["qy"]),
        "interest_curve": data["rts"],
        "spreading_period": 1, 
        "partner_frequency": data["hxy"],
-       "payout_is_praenumerando": False,  # payout_timing
-       "payout_is_montly": True}          # payout_frequency
+       "payout_is_praenumerando": False,   # payout_timing
+       "payout_is_monthly": True}          # payout_frequency
 
 
                         
@@ -59,13 +59,15 @@ settings = {"STARTJAAR": 2026,
             "DELTA_LEEFTIJD_X_MIN_Y": 33,
             "DELTA_LEEFTIJD_Y_MIN_X": -18}
 
+settings = {}
+
 class PreProcessor:
       """
       Holds source data and settings for the cashflow calculations and offers some data preprocessing utilities.
 
       Parameters:
       data (dict): A dictionary containing the following pandas Dataframes: qx, qy, es, hxy, rts 
-      settings (dict): A dictionary containing the following settings: STARTJAAR, DELTA_LEEFTIJD_X_MIN_Y, DELTA_LEEFTIJD_Y_MIN_X, BETALINGSTERMIJN, SPREIDINGSPERIODE_IN_JAREN, IS_PRAENUMERANDO
+      settings (dict): A dictionary containing the following settings: start_year, delta_x_y_months, delta_x_y_months, payout_is_monthly, spreading_period, payout_is_praenuemrando
       """
       def __init__(self, data: dict, settings: dict):
             self.data = data
@@ -77,7 +79,7 @@ class PreProcessor:
 
       def calculate_base(self) -> dict:
             normalized_data = self.normalize_data()
-            forward_rates_monthly = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["rts"].set_index("looptijd_jaren")["pct_rente"]))
+            forward_rates_monthly = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["interest_curve"].set_index("looptijd_jaren")["pct_rente"]))
             return preprocess(normalized_data, forward_rates_monthly, self.settings)
 
 
@@ -222,10 +224,10 @@ class TermInsurance:
 # Run test cases
 #
 
-processed_data = PreProcessor(data, settings)
+processed_data = PreProcessor(dat, settings)
 
 # annuities
-annuity = Annuity(processed_data.base, settings=settings)
+annuity = Annuity(processed_data.base, settings=processed_data.data)
 
 op = annuity.calculate_cfs(label="cfs_op", payments_start_age=PENSIOENLEEFTIJD_MAANDEN)
 ax = annuity.calculate_cfs(label="cfs_ax")

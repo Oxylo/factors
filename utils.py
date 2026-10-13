@@ -164,20 +164,24 @@ def normalize(data: dict)-> dict:
         Dictionary with normalized dataframes.
     """
     # normalize tables to long format for merging
-    data["es_x_long"] = (data["es"]
+    data["es_x_long"] = (data["experience_mortality"]
                 .loc[:, ["leeftijd_jaren", "es_hoofdvz_M", "es_hoofdvz_V"]]
                 .rename(columns={"es_hoofdvz_M": "M", "es_hoofdvz_V": "F"})
                 .melt(id_vars="leeftijd_jaren", var_name="gender", value_name="es_x")
                 .set_index(["leeftijd_jaren", "gender"])
                 )
 
-    data["es_y_long"] = (data["es"]
+    data["es_y_long"] = (data["experience_mortality"]
                 .loc[:, ["leeftijd_jaren", "es_medevz_M", "es_medevz_V"]]
                 .rename(columns={"es_medevz_M": "F", "es_medevz_V": "M"})
                 .melt(id_vars="leeftijd_jaren", var_name="gender", value_name="es_y")
                 .set_index(["leeftijd_jaren", "gender"])
                 )
 
+    data["qx"] = data["mortality_table"].query("gender=='M'").drop(columns="gender")
+    data["qy"] = data["mortality_table"].query("gender=='F'").drop(columns="gender")
+    
+    
     data["tab_qx_long"] = (data["qx"]
                 .melt(id_vars="leeftijd_jaren", var_name="calendar_year", value_name="qx")
                 .assign(gender="M"))
@@ -192,11 +196,11 @@ def normalize(data: dict)-> dict:
                 )
 
     data["delta_age"] = (pd.DataFrame({"gender": ["M", "F"],
-                                "delta_age": data["params"][["DELTA_LEEFTIJD_MAANDEN_X_MIN_Y", "DELTA_LEEFTIJD_MAANDEN_Y_MIN_X"]].values[0]})
+                                "delta_age": [data["delta_x_y_months"], data["delta_y_x_months"]]})
                                 .set_index("gender")
                                 )
 
-    data["tab_hx"] = (data["hxy"]
+    data["tab_hx"] = (data["partner_frequency"]
             .rename(columns={"hx": "M", "hy": "F"})
             .melt(id_vars="leeftijd_jaren", var_name="gender", value_name="hx")
                 .set_index(["leeftijd_jaren", "gender"])
@@ -221,14 +225,13 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
     dict
         Dictionary with preprocessed dataframes.
     """
-    nages = len(data["qy"])
-
+    
     df = (pd.MultiIndex.from_product(
         [["M", "F"], data["qy"]["leeftijd_jaren"], np.arange(NMAANDEN_PER_JAAR), data["qy"]["leeftijd_jaren"], np.arange(NMAANDEN_PER_JAAR)],
         names=["gender", "age0_years", "month", "projection_year_nr", "projection_month_nr"])
         .to_frame(index=False)
         .assign(index_nr=lambda x: x.projection_year_nr * NMAANDEN_PER_JAAR + x.projection_month_nr)
-        .assign(calendar_year=lambda x: settings["STARTJAAR"] + x["projection_year_nr"])
+        .assign(calendar_year=lambda x: data["start_year"] + x["projection_year_nr"])
         .assign(age0_months=lambda x: x["age0_years"] * 12 + x["month"])
         .assign(age_months=lambda x: x["age0_months"] + x["projection_year_nr"] * 12 + x["projection_month_nr"])
         .assign(age_year_component=lambda x: x["age_months"] // 12)
@@ -239,10 +242,10 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
         .assign(age_year_component_shifted_1yr=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["age_year_component"].shift(-11))
         .assign(calendar_year_shifted=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["calendar_year"].shift())
         .assign(age_months_shifted=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["age_months"].shift())
-        .assign(step_function_prae=lambda x: np.minimum(x["index_nr"] // 12 + 1, settings["SPREIDINGSPERIODE_IN_JAREN"]) / settings["SPREIDINGSPERIODE_IN_JAREN"])
+        .assign(step_function_prae=lambda x: np.minimum(x["index_nr"] // 12 + 1, data["spreading_period"]) / data["spreading_period"])
         .assign(step_function_post=lambda df: df.groupby(["gender", "age0_years", "month"], sort=False)["step_function_prae"].shift())
         .fillna({"step_function_post": 0})
-        .assign(step_function = lambda x: np.where(settings["IS_PRAENUMERANDO"], x["step_function_prae"], x["step_function_post"]))
+        .assign(step_function = lambda x: np.where(data["payout_is_praenumerando"], x["step_function_prae"], x["step_function_post"]))
         .drop(columns=["step_function_prae", "step_function_post"])
     )
 
@@ -264,7 +267,7 @@ def preprocess(data: dict, forward_rates_monthly: pd.DataFrame, settings: dict) 
         #.assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
         # .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
         #.assign(payment = lambda x: PAYMENT_IS_MONTHLY * x["payment_monthly"] + (1 - PAYMENT_IS_MONTHLY) * x["payment_yearly"])
-        .assign(payment_ever = lambda x: settings["PAYMENT_IS_MONTHLY"] / NMAANDEN_PER_JAAR + (1 - settings["PAYMENT_IS_MONTHLY"]) * (x["index_nr"] % NMAANDEN_PER_JAAR == 0))
+        .assign(payment_ever = lambda x: data["payout_is_monthly"] / NMAANDEN_PER_JAAR + (1 - data["payout_is_monthly"]) * (x["index_nr"] % NMAANDEN_PER_JAAR == 0))
         .merge(forward_rates_monthly[["spot_rate_monthly"]], how="left", left_on="index_nr", right_index=True)
         .fillna({"spot_rate_monthly": 1})
         .assign(discount_factor=lambda x: (1 + x["spot_rate_monthly"])**(-1 * x["index_nr"]))
