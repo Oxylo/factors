@@ -10,7 +10,8 @@ from utils import (
       preprocess,
       read_workbook,
       normalize,
-      upload_df2db
+      upload_df2db,
+      merge_mortality_tables
 )
 from system_settings import NMAANDEN_PER_JAAR, DEFAULT_PENSION_AGE_MONTHS
 
@@ -19,20 +20,52 @@ fp = os.path.join(data_dir, "rail26.xlsx")
 testset_fp = os.path.join(data_dir, "testset.xlsx")
 data = read_workbook(fp)
 
-# To DO:
-# conn = sqlite3.connect("data/factors.db")
-# upload_df2db(data["qx"], table_name="AG2024_x", connection_string=conn)
+
+dat = {"mortality_table": pd.DataFrame,
+       "start_year": int,
+        "delta_x_y_months": int,  
+        "delta_y_x_months": int,
+        "experience_mortality": pd.DataFrame,
+        "interest_curve": pd.DataFrame,
+        "spreading_period": int, 
+        "partner_frequency": pd.DataFrame,
+        "payout_is_praenumerando": bool,  # payout_timing
+        "payout_is_montly": bool} # payout_frequency
+
+dat = {"mortality_table": merge_mortality_tables(data["qx"], data["qy"]),
+       "start_year": 2026,
+       "delta_x_y_months": 33,  
+       "delta_y_x_months": -18,
+       "experience_mortality": data["es"],
+       "interest_curve": data["rts"],
+       "spreading_period": 1, 
+       "partner_frequency": data["hxy"],
+       "payout_is_praenumerando": False,  # payout_timing
+       "payout_is_montly": True}          # payout_frequency
 
 
+                        
 PENSIOENLEEFTIJD_MAANDEN = 12 * 68 # pe_leeftijd_maanden
 
 
-# assumptions
-settings = {"STARTJAAR": 2026, "IS_PRAENUMERANDO": False, "PAYMENT_IS_MONTHLY": True, "SPREIDINGSPERIODE_IN_JAREN": 1}
+ 
 
-class Assumptions:
+
+# assumptions
+settings = {"STARTJAAR": 2026,
+            "IS_PRAENUMERANDO": False,
+            "PAYMENT_IS_MONTHLY": True,
+            "SPREIDINGSPERIODE_IN_JAREN": 1,
+            "DELTA_LEEFTIJD_X_MIN_Y": 33,
+            "DELTA_LEEFTIJD_Y_MIN_X": -18}
+
+class PreProcessor:
       """
-      Holds the assumptions for the calculations, including start year, whether payments are pre- or postnumerando, payment frequency, and spreading period in years.
+      Holds source data and settings for the cashflow calculations and offers some data preprocessing utilities.
+
+      Parameters:
+      data (dict): A dictionary containing the following pandas Dataframes: qx, qy, es, hxy, rts 
+      settings (dict): A dictionary containing the following settings: STARTJAAR, DELTA_LEEFTIJD_X_MIN_Y, DELTA_LEEFTIJD_Y_MIN_X, BETALINGSTERMIJN, SPREIDINGSPERIODE_IN_JAREN, IS_PRAENUMERANDO
       """
       def __init__(self, data: dict, settings: dict):
             self.data = data
@@ -47,8 +80,6 @@ class Assumptions:
             forward_rates_monthly = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["rts"].set_index("looptijd_jaren")["pct_rente"]))
             return preprocess(normalized_data, forward_rates_monthly, self.settings)
 
-
-processed_data = Assumptions(data, settings)
 
 class Annuity:
       """
@@ -190,6 +221,8 @@ class TermInsurance:
 #
 # Run test cases
 #
+
+processed_data = PreProcessor(data, settings)
 
 # annuities
 annuity = Annuity(processed_data.base, settings=settings)

@@ -310,7 +310,19 @@ def upload_df2db(df: pd.DataFrame, table_name: str, connection_string: str) -> N
         Name of the target database table.
     connection_string : str
         Database connection string.
+        Example: conn = sqlite3.connect("data/factors.db")
     """
 
     df.to_sql(table_name, con=connection_string, if_exists="replace", index=False)
     connection_string.close()
+
+
+def merge_mortality_tables(qx: pd.DataFrame, qy: pd.DataFrame) -> pd.DataFrame:
+      """ Merge mortality tables for males (qx) and females (qy) together into 1 table.
+      """
+      tab_qx, tab_qy = qx.copy(), qy.copy()
+      tab_qx.insert(1, "gender", ["M" for k in range(len(qx))])
+      tab_qy.insert(1, "gender", ["F" for k in range(len(qx))])
+      return pd.concat([tab_qx, tab_qy])
+            
+
