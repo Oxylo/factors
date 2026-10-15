@@ -17,25 +17,28 @@ class PreProcessor:
       def __init__(self, data: dict):
             self.data = data
             self.base = self.calculate_base()
+            self.forward_rates_monthly = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["interest_curve"].set_index("looptijd_jaren")["pct_rente"]))
 
       def normalize_data(self) -> dict:
             return normalize(self.data)
 
       def calculate_base(self) -> dict:
             normalized_data = self.normalize_data()
-            forward_rates_monthly = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["interest_curve"].set_index("looptijd_jaren")["pct_rente"]))
-            return preprocess(normalized_data, forward_rates_monthly)
+            frm = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["interest_curve"].set_index("looptijd_jaren")["pct_rente"]))
+            return preprocess(normalized_data, frm)
 
 
-class Annuity:
+class Insurance:
       """
-      Represents an annuity calculation, with methods to compute the cash flows based on the provided (processed) data.
+      Generate cashflows per insurcance type, based on the provided (processed) data.
       """
       def __init__(self, processed_data: dict):  
             self.processed_data = processed_data
+
+      # 1. Annuities
             
             
-      def calculate_cfs(self, label: str="ax", payments_start_age: int|None=None, payments_end_age: int|None=None, two_lives: bool=False, age_range: list|None=None) -> pd.Series:
+      def cfs_annuity(self, label: str="ax", payments_start_age: int|None=None, payments_end_age: int|None=None, two_lives: bool=False, age_range: list|None=None) -> pd.Series:
             startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.processed_data.data["payout_is_praenumerando"])
             eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
             if age_range:
@@ -52,19 +55,14 @@ class Annuity:
                   .assign(prob_alive = lambda x: x["npxy"] if two_lives else x["npx"])
                   .assign(cfs = lambda x: x["prob_alive"] * x["payment"] * x["step_function"])
                   .rename(columns={"cfs": label})
-                  .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
-                  .set_index(["gender", "age0_years", "month", "index_nr"])
+                  .loc[:, ["gender", "age0_months", "index_nr", label]]
+                  .set_index(["gender", "age0_months", "index_nr"])
                   )
 
 
-class PartnerPension:
-      """
-      Represents a partner pension calculation, with methods to compute the cash flows based on the provided (processed) data.
-      """
-      def __init__(self, processed_data: dict):  
-            self.processed_data = processed_data
+      # 2. Partner Pension
             
-      def calculate_cfs_determined(self, label: str="ax|y", payments_start_age: int|None=None, payments_end_age: int|None=None, age_range: list|None=None) -> pd.Series:
+      def cfs_partner_pension_determined(self, label: str="ax|y", payments_start_age: int|None=None, payments_end_age: int|None=None, age_range: list|None=None) -> pd.Series:
             startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.processed_data.data["payout_is_praenumerando"])
             eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
             if age_range:
@@ -84,11 +82,11 @@ class PartnerPension:
                   .assign(cfs = lambda x: np.where(x["has_payment"], x["cfs_ay"] - x["cfs_axy"], 0))
                   .assign(cfs = lambda x: (1 - self.processed_data.data["payout_is_praenumerando"]) * (x["index_nr"] > 0) * x["cfs"])  # Deze regel moet er waarschijnlijk uit, want partnerpensioen is altijd postnumerando, dus geen betaling bij index_nr = 0
                   .rename(columns={"cfs": label})
-                  .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
-                  .set_index(["gender", "age0_years", "month", "index_nr"])
+                  .loc[:, ["gender", "age0_months", "index_nr", label]]
+                  .set_index(["gender", "age0_months", "index_nr"])
                   )
 
-      def calculate_cfs_indetermined(self, label: str="ax|yh", pension_age_months: int=DEFAULT_PENSION_AGE_MONTHS, lifelong_payments: bool=True, age_range: list|None=None) -> pd.Series:
+      def cfs_partner_pension_indetermined(self, label: str="ax|yh", pension_age_months: int=DEFAULT_PENSION_AGE_MONTHS, lifelong_payments: bool=True, age_range: list|None=None) -> pd.Series:
 
             if age_range:
                 b = self.processed_data.base["df2_xy"].query(f"age0_months.isin({age_range})") 
@@ -130,8 +128,8 @@ class PartnerPension:
             if lifelong_payments:
                   return (b
                         .rename(columns={"cfs_pp_onbepaald": label})
-                        .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
-                        .set_index(["gender", "age0_years", "month", "index_nr"]))
+                        .loc[:, ["gender", "age0_months", "index_nr", label]]
+                        .set_index(["gender", "age0_months", "index_nr"]))
             else:
                   return (b.copy()
                         # NPONBEP_uitgesteld
@@ -146,18 +144,13 @@ class PartnerPension:
                         .assign(cfs_tnponbepaald = lambda x: x["cfs_pp_onbepaald"] - x["cfs_pp_onbepaald_uitgesteld"])
                         .assign(cfs_tnponbepaald_discounted = lambda x: x["cfs_tnponbepaald"] * x["discount_factor"])
                         .rename(columns={"cfs_tnponbepaald": label})
-                        .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
-                        .set_index(["gender", "age0_years", "month", "index_nr"]))
+                        .loc[:, ["gender", "age0_months", "index_nr", label]]
+                        .set_index(["gender", "age0_months", "index_nr"]))
 
+      # 3. Term insurance
 
-class TermInsurance:
-      """
-      Represents a term insurance calculation, with methods to compute the cash flows based on the provided (processed) data.
-      """
-      def __init__(self, processed_data: dict):  
-            self.processed_data = processed_data
             
-      def calculate_cfs(self, label: str="Ax", payments_start_age: int|None=None, payments_end_age: int|None=None, age_range: list|None=None) -> pd.Series:
+      def cfs_terminsurance(self, label: str="Ax", payments_start_age: int|None=None, payments_end_age: int|None=None, age_range: list|None=None) -> pd.Series:
             startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.processed_data.data["payout_is_praenumerando"])
             eindleeftijd_uitkering_maanden = np.inf if payments_end_age is None else payments_end_age
 
@@ -174,7 +167,91 @@ class TermInsurance:
                   .assign(payment = lambda x: self.processed_data.data["payout_is_monthly"] * x["payment_monthly"] + (1 - self.processed_data.data["payout_is_monthly"]) * x["payment_yearly"])
                   .assign(cfs = lambda x: x["payment"] * x["kqx"] * x["step_function"] * NMAANDEN_PER_JAAR)
                   .rename(columns={"cfs": label})
-                  .loc[:, ["gender", "age0_years", "month", "index_nr", label]]
-                  .set_index(["gender", "age0_years", "month", "index_nr"])
-                  )
+                  .loc[:, ["gender", "age0_months", "index_nr", label]]
+                  .set_index(["gender", "age0_months", "index_nr"]))
+
+      # By individual insurance type    
+
+      def calculate_cfs(self, insurance_type: str, pe_age_range: list):
+           allowed_insurance_types = ("OP", "AX", "AXN", "AXY", "NPBEPAALD", "TNPBEPAALD", "NPONBEPAALD", "TNPONBEPAALD", "SG_OP", "SG_AX", "SG_AXN")
+           if not insurance_type in allowed_insurance_types:
+                raise Exception(f"Insurance type should be in {allowed_insurance_types}")
+
+           new_dex = ["insurance_type", "pe_age", "age0_months", "gender", "index_nr"]
+           outp = len(pe_age_range) * [np.nan]
+
+           match insurance_type:
+                     
+                case "OP":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_annuity(label="cfs", payments_start_age=pe)
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="OP").set_index(new_dex)
+                     return pd.concat(outp)
+             
+                case "AX":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_annuity(label="cfs")
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="AX").set_index(new_dex)
+                     return pd.concat(outp)
+ 
+                case "AXN":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_annuity(label="cfs", payments_end_age=pe)
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="AXN").set_index(new_dex)
+                     return pd.concat(outp)
+
+                case "AXY":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_annuity(label="cfs", two_lives=True)
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="AXY").set_index(new_dex)
+                     return pd.concat(outp)
+
+                case "NPBEPAALD":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_partner_pension_determined(label="cfs")
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="NPBEPAALD").set_index(new_dex)
+                     return pd.concat(outp)
+                      
+                case "TNPBEPAALD":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_partner_pension_determined(label="cfs", payments_end_age=pe)
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="TNPBEPAALD").set_index(new_dex)
+                     return pd.concat(outp)
+                     
+                case "NPONBEPAALD":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_partner_pension_indetermined(label="cfs", pension_age_months=pe)
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="NPONBEPAALD").set_index(new_dex)
+                     return pd.concat(outp)
+                     
+                case "TNPONBEPAALD":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_partner_pension_indetermined(label="cfs", pension_age_months=pe, lifelong_payments=False)
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="TNPONBEPAALD").set_index(new_dex)
+                     return pd.concat(outp)
+                     
+                case "SG_OP":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_terminsurance(label="cfs", payments_start_age=pe)
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="SG_OP").set_index(new_dex)
+                     return pd.concat(outp)
+                     
+                case "SG_AX":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_terminsurance(label="cfs")
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="SG_AX").set_index(new_dex)
+                     return pd.concat(outp)
+                     
+                case "SG_AXN":
+                     for i, pe in enumerate(pe_age_range):
+                        cf = self.cfs_terminsurance(label="cfs", payments_end_age=pe)
+                        outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="SG_AXN").set_index(new_dex)
+                     return pd.concat(outp)
+                     
+                     
+
+           
+                
+
+                  
  

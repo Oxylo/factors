@@ -325,5 +325,26 @@ def merge_mortality_tables(qx: pd.DataFrame, qy: pd.DataFrame) -> pd.DataFrame:
       tab_qx.insert(1, "gender", ["M" for k in range(len(qx))])
       tab_qy.insert(1, "gender", ["F" for k in range(len(qx))])
       return pd.concat([tab_qx, tab_qy])
+
+def get_uniques_per_group(df: pd.DataFrame) -> dict:
+      """ Return dict of lists, containing unique values in 2nd column per category in 1st column
+
+      Parameters
+      ----------
+      df : pd.DataFrame 
+
+      Returns
+      -------
+      dict with k,v = (category in 1st columns, list of unique values in 2nd column)
+      """
+      detected_number_of_columns = df.shape[1]
+      required_number_of_columns = 2
+      if  detected_number_of_columns != required_number_of_columns:
+            raise Exception(f"Dataframe should have exactly {required_number_of_columns} columns ({detected_number_of_columns} detected).")
+      
+      categories = df.iloc[:, 0].unique()
+      return {cat: df[df.iloc[:, 0]==cat].iloc[:, 1].unique().tolist() for cat in categories}
+
+
             
 
