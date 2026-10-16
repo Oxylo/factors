@@ -3,7 +3,8 @@ import pandas as pd
 from utils import (convert_yearly_to_monthly,
                    calculate_forward_rate_yearly,
                    preprocess,
-                   normalize)
+                   normalize,
+                   )
 from system_settings import NMAANDEN_PER_JAAR, DEFAULT_PENSION_AGE_MONTHS
 
 
@@ -17,7 +18,7 @@ class PreProcessor:
       def __init__(self, data: dict):
             self.data = data
             self.base = self.calculate_base()
-            self.forward_rates_monthly = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["interest_curve"].set_index("looptijd_jaren")["pct_rente"]))
+            self.discount = self.calculate_discount()
 
       def normalize_data(self) -> dict:
             return normalize(self.data)
@@ -27,6 +28,10 @@ class PreProcessor:
             frm = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["interest_curve"].set_index("looptijd_jaren")["pct_rente"]))
             return preprocess(normalized_data, frm)
 
+      def calculate_discount(self) -> pd.DataFrame:
+           fw_rates = convert_yearly_to_monthly(calculate_forward_rate_yearly(self.data["interest_curve"].set_index("looptijd_jaren")["pct_rente"]))
+           return fw_rates.assign(discount_factor=lambda x: (1 + x["spot_rate_monthly"])**(-1 * x.index))["discount_factor"]
+
 
 class Insurance:
       """
@@ -34,6 +39,8 @@ class Insurance:
       """
       def __init__(self, processed_data: dict):  
             self.processed_data = processed_data
+            self.store_cashflows = None
+            self.store_factors = None
 
       # 1. Annuities
             
@@ -247,6 +254,25 @@ class Insurance:
                         cf = self.cfs_terminsurance(label="cfs", payments_end_age=pe)
                         outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="SG_AXN").set_index(new_dex)
                      return pd.concat(outp)
+
+      def cfs(self, pe_ages_per_insurance_type: dict) -> pd.DataFrame:
+           self.store_cashflows = pd.concat([self.calculate_cfs(insurance_type=k, pe_age_range=v) for k, v in pe_ages_per_insurance_type.items()])
+           return self.store_cashflows
+
+      def factors(self) -> pd.DataFrame:
+           if self.store_cashflows is None:
+                raise Exception("Calculate cashflows first! (use the .cfs() method)")
+           else:
+                self.store_factors = (self.store_cashflows
+                           .merge(self.processed_data.discount, left_on="index_nr", right_index=True, how="left")
+                           .fillna(1)
+                           .assign(discounted_cfs=lambda x: x["cfs"] * x["discount_factor"])
+                           .groupby(["insurance_type", "pe_age", "age0_months", "gender"])["discounted_cfs"]
+                           .sum())
+                return self.store_factors
+
+                
+
                      
                      
 

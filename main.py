@@ -49,15 +49,9 @@ pe_ages_per_insurance_type = {"OP": [804, 816], "AXN": [253, 301]}
 
 processed_data = PreProcessor(assumption_set)  
 insurance = Insurance(processed_data)
-cash_flows = pd.concat([insurance.calculate_cfs(insurance_type=k, pe_age_range=v) for k, v in pe_ages_per_insurance_type.items()])
+cf = insurance.cfs(pe_ages_per_insurance_type)
+fac = insurance.factors()
 
-discount_factor = processed_data.forward_rates_monthly.assign(discount_factor=lambda x: (1 + x["spot_rate_monthly"])**(-1 * x.index))["discount_factor"]
-factors = (cash_flows
-          .merge(discount_factor, left_on="index_nr", right_index=True, how="left")
-          .fillna(1)
-          .assign(discounted_cfs=lambda x: x["cfs"] * x["discount_factor"])
-          .groupby(["insurance_type", "pe_age", "age0_months", "gender"])["discounted_cfs"]
-          .sum())
  
 
 
@@ -78,6 +72,8 @@ test_data = (pd.read_excel("data/testset.xlsx", sheet_name="Sheet1")
                               "geslacht": "gender",
                               "tarief_label": "insurance_type"}))
 
+pe_ages_per_insurance_type = get_uniques_per_group(test_data[["insurance_type", "pe_age"]])
+
 # -------------------------------------------------------------------------------------------
 
 # Calculation
@@ -93,26 +89,23 @@ processed_data.base["df2"] = processed_data.base["df2"].merge(selection, on=["ag
 processed_data.base["df2_xy"] = processed_data.base["df2_xy"].merge(selection, on=["age0_months", "gender"])
 
 insurance = Insurance(processed_data)
+cf = insurance.cfs(pe_ages_per_insurance_type)
+fac = insurance.factors()
 
-pe_ages_per_insurance_type = get_uniques_per_group(test_data[["insurance_type", "pe_age"]])
 
-cash_flows = pd.concat([insurance.calculate_cfs(insurance_type=k, pe_age_range=v) for k, v in pe_ages_per_insurance_type.items()])
 
-discount_factor = processed_data.forward_rates_monthly.assign(discount_factor=lambda x: (1 + x["spot_rate_monthly"])**(-1 * x.index))["discount_factor"]
-                                          
-factors = (cash_flows
-          .merge(discount_factor, left_on="index_nr", right_index=True, how="left")
-          .fillna(1)
-          .assign(discounted_cfs=lambda x: x["cfs"] * x["discount_factor"])
-          .groupby(["insurance_type", "pe_age", "age0_months", "gender"])["discounted_cfs"]
-          .sum())
 
 
 #
 # A) Ik wil één specifieke factor berekenen
 #
 
+processed_data = PreProcessor(assumption_set)
+insurance = Insurance(processed_data)
 
+
+cf = insurance.cfs(pe_ages_per_insurance_type)
+fac = insurance.factors()
 
 
 
@@ -125,8 +118,8 @@ factors = (cash_flows
 
 #### TEST
 
-compare = test_data.merge(factors.to_frame().reset_index(), on=["pe_age", "age0_months", "gender", "insurance_type"])
+compare = test_data.merge(fac.to_frame().reset_index(), on=["pe_age", "age0_months", "gender", "insurance_type"])
 errors = compare.assign(delta = lambda x: np.abs(x["factor"] - x["discounted_cfs"])).query("delta >= 0.00000001")
 errors.insurance_type.value_counts()
-# compare.set_index(["pe_age", "age0_months", "gender", "insurance_type"]).loc[:, 0, "F", "NPONBEPAALD"]
+compare.set_index(["pe_age", "age0_months", "gender", "insurance_type"]).loc[816, 804, "F", :].round(10) * 100
 
