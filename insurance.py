@@ -4,8 +4,13 @@ from utils import (convert_yearly_to_monthly,
                    calculate_forward_rate_yearly,
                    preprocess,
                    normalize,
+                   get_uniques_per_group
                    )
 from system_settings import NMAANDEN_PER_JAAR, DEFAULT_PENSION_AGE_MONTHS
+
+
+class UninitializedStateException(RuntimeError):
+    """Exception raised when methods are called out of order."""
 
 
 class PreProcessor:
@@ -41,9 +46,9 @@ class Insurance:
             self.processed_data = processed_data
             self.store_cashflows = None
             self.store_factors = None
+            self.store_base = {}
 
       # 1. Annuities
-            
             
       def cfs_annuity(self, label: str="ax", payments_start_age: int|None=None, payments_end_age: int|None=None, two_lives: bool=False, age_range: list|None=None) -> pd.Series:
             startleeftijd_uitkering_maanden = -np.inf if payments_start_age is None else (payments_start_age + 1 - self.processed_data.data["payout_is_praenumerando"])
@@ -60,7 +65,7 @@ class Insurance:
                   .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
                   .assign(payment = lambda x: self.processed_data.data["payout_is_monthly"] * x["payment_monthly"] + (1 - self.processed_data.data["payout_is_monthly"]) * x["payment_yearly"])
                   .assign(prob_alive = lambda x: x["npxy"] if two_lives else x["npx"])
-                  .assign(cfs = lambda x: x["prob_alive"] * x["payment"] * x["step_function"])
+                  .assign(cfs = lambda x: x["prob_alive"] * x["payment"])
                   .rename(columns={"cfs": label})
                   .loc[:, ["gender", "age0_months", "index_nr", label]]
                   .set_index(["gender", "age0_months", "index_nr"])
@@ -83,8 +88,8 @@ class Insurance:
                   .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
                   .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
                   .assign(payment = lambda x: self.processed_data.data["payout_is_monthly"] * x["payment_monthly"] + (1 - self.processed_data.data["payout_is_monthly"]) * x["payment_yearly"])
-                  .assign(cfs_axy = lambda x: x["npxy"] * x["payment"] * x["step_function"])
-                  .assign(cfs_ay = lambda x: x["npy"] * x["payment_ever"] * x["step_function"] * np.where((1 - self.processed_data.data["payout_is_monthly"]) * (x["index_nr"] == 0), 0.5, 1))
+                  .assign(cfs_axy = lambda x: x["npxy"] * x["payment"])
+                  .assign(cfs_ay = lambda x: x["npy"] * x["payment_ever"] * np.where((1 - self.processed_data.data["payout_is_monthly"]) * (x["index_nr"] == 0), 0.5, 1))
                   .assign(cfs_ay_discounted = lambda x: x["cfs_ay"] * x["discount_factor"])
                   .assign(cfs = lambda x: np.where(x["has_payment"], x["cfs_ay"] - x["cfs_axy"], 0))
                   .assign(cfs = lambda x: (1 - self.processed_data.data["payout_is_praenumerando"]) * (x["index_nr"] > 0) * x["cfs"])  # Deze regel moet er waarschijnlijk uit, want partnerpensioen is altijd postnumerando, dus geen betaling bij index_nr = 0
@@ -172,7 +177,7 @@ class Insurance:
                   .assign(payment_yearly=lambda x: np.where(x["has_payment"] & (x["index_nr"] % NMAANDEN_PER_JAAR == 0), 1, 0) * np.where(NMAANDEN_PER_JAAR * x["age_year_component"] == startleeftijd_uitkering_maanden, 0.5, 1))
                   .assign(payment_monthly=lambda x: np.where(x["has_payment"], 1/NMAANDEN_PER_JAAR, 0))
                   .assign(payment = lambda x: self.processed_data.data["payout_is_monthly"] * x["payment_monthly"] + (1 - self.processed_data.data["payout_is_monthly"]) * x["payment_yearly"])
-                  .assign(cfs = lambda x: x["payment"] * x["kqx"] * x["step_function"] * NMAANDEN_PER_JAAR)
+                  .assign(cfs = lambda x: x["payment"] * x["kqx"] * NMAANDEN_PER_JAAR)
                   .rename(columns={"cfs": label})
                   .loc[:, ["gender", "age0_months", "index_nr", label]]
                   .set_index(["gender", "age0_months", "index_nr"]))
@@ -182,7 +187,7 @@ class Insurance:
       def calculate_cfs(self, insurance_type: str, pe_age_range: list):
            allowed_insurance_types = ("OP", "AX", "AXN", "AXY", "NPBEPAALD", "TNPBEPAALD", "NPONBEPAALD", "TNPONBEPAALD", "SG_OP", "SG_AX", "SG_AXN")
            if not insurance_type in allowed_insurance_types:
-                raise Exception(f"Insurance type should be in {allowed_insurance_types}")
+                raise ValueError(f"Insurance type should be in {allowed_insurance_types}")
 
            new_dex = ["insurance_type", "pe_age", "age0_months", "gender", "index_nr"]
            outp = len(pe_age_range) * [np.nan]
@@ -255,21 +260,91 @@ class Insurance:
                         outp[i] = cf.reset_index().assign(pe_age=pe, insurance_type="SG_AXN").set_index(new_dex)
                      return pd.concat(outp)
 
-      def cfs(self, pe_ages_per_insurance_type: dict) -> pd.DataFrame:
+      def cfs_old(self, pe_ages_per_insurance_type: dict) -> pd.DataFrame:
            self.store_cashflows = pd.concat([self.calculate_cfs(insurance_type=k, pe_age_range=v) for k, v in pe_ages_per_insurance_type.items()])
            return self.store_cashflows
+      
+      
+      
+      def validate_selection(self, selection) -> None:
+           allowed_insurance_types = ("OP", "AX", "AXN", "AXY", "NPONBEPAALD", "TNPONBEPAALD", "NPBEPAALD", "TNPBEPAALD", "SG_OP", "SG_AX", "SG_AXN")
+           required_individual_keys = ("age0_months", "pe_age", "insurance_type")
+           
+           is_df = isinstance(selection, pd.DataFrame)
+           if isinstance(selection, dict):
+                is_dict_pe_ages = all(item in allowed_insurance_types for item in selection.keys()) & all(isinstance(item, list) for item in selection.values()) 
+                is_dict_individual_case = all(item in required_individual_keys for item in selection.keys())
+           else:
+                is_dict_pe_ages = False
+                is_dict_individual_case = False 
+      
+           if not any([is_df, is_dict_pe_ages, is_dict_individual_case]):
+               raise TypeError("Invalid parameter 'selection'.\n"
+                               "---------------------------------\n"
+                               f"- 1 specific factor? --> use dict containing {required_individual_keys} as keys and scalar as values\n"
+                               f"- own selection of factors? --> use DataFrame containing the columns: {required_individual_keys}\n" 
+                               f"- all factors? --> dict containing at least one of the keys {allowed_insurance_types} and list as values")
+           if is_dict_individual_case:
+                return "individual"
+           if is_df:
+                return "own selection"
+           if is_dict_pe_ages:
+                return "all factors" 
+                    
+      
+      def cfs(self, selection: pd.DataFrame|dict|None=None) -> pd.DataFrame:
 
+          validation_outcome = self.validate_selection(selection)
+
+          match validation_outcome:
+               case "individual":
+                    individual_case = pd.DataFrame(data={k: 2*[v] for k, v in selection.items()}).assign(gender=["M", "F"])
+                    self.update_base(individual_case)
+                    pe_ages_per_insurance_type = {selection["insurance_type"]: [selection["pe_age"]]}
+               case "own selection":
+                    self.update_base(selection.drop_duplicates(subset=["age0_months", "gender"]))
+                    pe_ages_per_insurance_type = get_uniques_per_group(selection[["insurance_type", "pe_age"]])
+               case "all factors":
+                    pe_ages_per_insurance_type = selection
+                                                   
+          self.store_cashflows = pd.concat([self.calculate_cfs(insurance_type=k, pe_age_range=v) for k, v in pe_ages_per_insurance_type.items()])
+          return self.store_cashflows
+
+      def update_base(self, selection: pd.DataFrame|None=None) -> pd.DataFrame:
+
+           if not self.store_base:
+                self.store_base["df2"] = self.processed_data.base["df2"].copy()
+                self.store_base["df2_xy"] = self.processed_data.base["df2_xy"].copy()
+           
+           self.processed_data.base["df2"] = self.store_base["df2"].merge(selection, on=["age0_months", "gender"])
+           self.processed_data.base["df2_xy"] = self.store_base["df2_xy"].merge(selection, on=["age0_months", "gender"])
+     
+                
       def factors(self) -> pd.DataFrame:
            if self.store_cashflows is None:
-                raise Exception("Calculate cashflows first! (use the .cfs() method)")
+                raise UninitializedStateException("Calculate cashflows first using the .cfs() method.")
            else:
+                
                 self.store_factors = (self.store_cashflows
                            .merge(self.processed_data.discount, left_on="index_nr", right_index=True, how="left")
+                           .merge(self.stepfunction, left_on="index_nr", right_index=True, how="left")
                            .fillna(1)
-                           .assign(discounted_cfs=lambda x: x["cfs"] * x["discount_factor"])
-                           .groupby(["insurance_type", "pe_age", "age0_months", "gender"])["discounted_cfs"]
+                           .assign(factor=lambda x: x["cfs"] * x["discount_factor"])
+                           .assign(factor_stepped=lambda x: x["factor"] * x["step_function"])
+                           .groupby(["insurance_type", "pe_age", "age0_months", "gender"])[["factor", "factor_stepped"]]
                            .sum())
-                return self.store_factors
+
+                unstacked = self.store_factors.unstack()
+                column_labels = ["_".join(item) for item in unstacked.columns]
+                unstacked.columns = column_labels
+                return unstacked.reset_index().loc[:, ["insurance_type", "age0_months", "pe_age", "factor_M", "factor_F", "factor_stepped_M", "factor_stepped_F"]]
+
+      @property
+      def stepfunction(self):
+           b = self.store_base["df2"] if self.store_base else self.processed_data.base["df2"]
+           return b.query("(age0_months==0) & (gender=='M')").loc[:, ["index_nr", "step_function"]].set_index("index_nr")
+           
+     
 
                 
 
